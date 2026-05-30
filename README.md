@@ -15,7 +15,7 @@ The project is built with Next.js, React, TypeScript, Supabase, and Supabase row
 - Deadline alerts for overdue, due-today, and upcoming items.
 - Staff access management with administrator-only controls.
 - Reassignment support when staff members are deactivated.
-- Supabase SQL scripts for database setup and staged upgrades.
+- Supabase-backed data model with row level security in the connected project.
 
 ## Tech Stack
 
@@ -42,9 +42,6 @@ utils/supabase/
   client.ts            Browser Supabase client
   server.ts            Server Supabase client
   middleware.ts        Session refresh helper
-
-supabase/
-  *.sql                Database setup and upgrade scripts
 
 public/
   *.png                Public static assets
@@ -93,26 +90,9 @@ Start a production build locally:
 npm run start
 ```
 
-## Database Setup
-
-The `supabase/` directory contains SQL scripts for setting up and upgrading the database schema.
-
-Use the scripts in a controlled Supabase environment and review them before running. They include tables, policies, helper functions, triggers, realtime publication updates, and access controls for:
-
-- Staff profiles and active staff checks.
-- Client records and client approval states.
-- Work planner rows.
-- Client service selections.
-- Client contacts.
-- Client fee arrangements.
-- Recurring tracker periods.
-- Administrator staff management.
-
-Recommended order for a fresh setup is to start with the base multi-user planner script, then apply later upgrade scripts as needed.
-
 ## Security And Privacy
 
-This repository should only contain application code and non-sensitive setup scripts.
+This repository should only contain application code and non-sensitive documentation.
 
 Do not commit:
 
@@ -139,7 +119,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
 Before deploying:
 
-- Confirm the Supabase database scripts have been applied to the target project.
+- Confirm the target Supabase project has the required tables, policies, functions, and realtime settings.
 - Confirm authentication is enabled and staff users have been created.
 - Confirm row level security policies are active.
 - Confirm no demo or private data is included in the deployed repository.
