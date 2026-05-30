@@ -143,3 +143,7 @@ npm run start
 ## Repository Hygiene
 
 Keep the repository generic and data-free. Documentation, commits, screenshots, test fixtures, and SQL examples should avoid identifying any business, client, staff member, or real-world financial information.
+
+## License
+
+All rights reserved. This repository is provided for viewing and reference only. No permission is granted to copy, modify, distribute, host, deploy, or otherwise reuse the code without prior written permission from the copyright holder. See [LICENSE](LICENSE).
