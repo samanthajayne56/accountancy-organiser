@@ -225,7 +225,7 @@ const statusOptions: Status[] = ["Ready", "In progress", "Queries", "Review", "U
 const priorityOptions: Priority[] = ["Normal", "Action", "Urgent", "Complete"];
 const clientTypes = ["Limited Company", "Sole Trader", "Self Assessment", "Partnership", "LLP", "Other"];
 const billingFrequencies = ["Monthly", "Quarterly", "Annually", "Hourly", "One-off"];
-const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "open", period: "all" };
+const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "all", period: "all" };
 
 const trackerGroups: Record<TrackerGroupId, string> = {
   tax: "Tax",
@@ -1434,7 +1434,7 @@ function TrackerFilterBar({ filters, rows, profiles, onChange }: {
       <label><span>Period</span><select value={filters.period} onChange={(event) => onChange({ ...filters, period: event.target.value })}><option value="all">(Select All)</option>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <label><span>Status</span><select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value })}><option value="all">All</option>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
       <label><span>Priority</span><select value={filters.priority} onChange={(event) => onChange({ ...filters, priority: event.target.value })}><option value="all">All</option>{priorityOptions.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select></label>
-      <label><span>Work</span><select value={filters.completion} onChange={(event) => onChange({ ...filters, completion: event.target.value as TrackerFilters["completion"] })}><option value="open">Open</option><option value="all">All</option><option value="complete">Complete</option></select></label>
+      <label><span>Work</span><select value={filters.completion} onChange={(event) => onChange({ ...filters, completion: event.target.value as TrackerFilters["completion"] })}><option value="all">All</option><option value="open">Open</option><option value="complete">Complete</option></select></label>
       <button className="secondaryButton trackerFilterReset" onClick={() => onChange(defaultTrackerFilters)}>Reset</button>
     </div>
   );
