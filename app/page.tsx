@@ -1558,9 +1558,10 @@ function PeriodWorkCell({ row, editable, expanded, confirming, onToggle, onUpdat
   onConfirm: (id: string | null) => void;
   onDelete: (id: string) => void;
 }) {
+  const statusTone = statusClass(row.status);
   return (
-    <div className="periodWork">
-      <select disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>
+    <div className={`periodWork ${statusTone}`}>
+      <select className={`statusSelect ${statusTone}`} disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>
         {statusOptions.map((status, index) => <option key={status} value={status}>{index + 1} - {status}</option>)}
       </select>
       <input disabled={!editable} type="date" value={row.deadlineDate ?? ""} onChange={(event) => onUpdate(row.id, { deadlineDate: event.target.value || null })} />

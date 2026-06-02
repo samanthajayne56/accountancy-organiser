@@ -2582,6 +2582,53 @@ h3 {
   border-radius: 0;
 }
 
+.spreadsheetTrackerTable .periodWork.ready {
+  background: color-mix(in srgb, var(--blue) 7%, #ffffff);
+}
+
+.spreadsheetTrackerTable .periodWork.in-progress,
+.spreadsheetTrackerTable .periodWork.review {
+  background: color-mix(in srgb, var(--yellow) 12%, #ffffff);
+}
+
+.spreadsheetTrackerTable .periodWork.queries,
+.spreadsheetTrackerTable .periodWork.urgent {
+  background: color-mix(in srgb, var(--red) 8%, #ffffff);
+}
+
+.spreadsheetTrackerTable .periodWork.filed,
+.spreadsheetTrackerTable .periodWork.complete {
+  background: color-mix(in srgb, var(--green) 9%, #ffffff);
+}
+
+.spreadsheetTrackerTable .statusSelect {
+  font-weight: 800;
+  border-color: transparent;
+}
+
+.spreadsheetTrackerTable .statusSelect.ready {
+  background: #e9f8fb;
+  color: #176f82;
+}
+
+.spreadsheetTrackerTable .statusSelect.in-progress,
+.spreadsheetTrackerTable .statusSelect.review {
+  background: #fff3cf;
+  color: #805a00;
+}
+
+.spreadsheetTrackerTable .statusSelect.queries,
+.spreadsheetTrackerTable .statusSelect.urgent {
+  background: #fff1ef;
+  color: #a9322c;
+}
+
+.spreadsheetTrackerTable .statusSelect.filed,
+.spreadsheetTrackerTable .statusSelect.complete {
+  background: #e9f7ed;
+  color: #0f6331;
+}
+
 .spreadsheetTrackerTable .periodCellActions {
   display: flex;
   gap: 5px;
