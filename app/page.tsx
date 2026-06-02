@@ -256,6 +256,7 @@ const trackers: Tracker[] = [
 const trackerById = Object.fromEntries(trackers.map((item) => [item.id, item]));
 const serviceTrackers = trackers.filter((item) => item.id !== "fixed-fees");
 const completeStatuses = new Set<Status>(["Filed", "Complete"]);
+const recurringRolloverStatuses = new Set<Status>(["Review", "Filed", "Complete"]);
 const recurringTrackerIds = new Set(["mtd-itsa", "vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "payroll", "cis"]);
 const monthlyTrackerIds = new Set(["vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "cis"]);
 const defaultMonthlyTrackerIds = new Set(["monthly-bk-vat", "monthly-bk-non-vat"]);
@@ -810,7 +811,7 @@ export default function Home() {
       return;
     }
 
-    if (patch.status && completeStatuses.has(updated.status) && !completeStatuses.has(current.status)) {
+    if (patch.status && recurringRolloverStatuses.has(updated.status) && !recurringRolloverStatuses.has(current.status)) {
       const nextError = await createNextRecurringTrackerRow(updated);
       if (nextError) {
         setErrorMessage(`Work saved, but the next recurring deadline could not be created: ${nextError}`);
