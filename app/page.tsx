@@ -126,6 +126,13 @@ type SpreadsheetTrackerGroup = {
   rowsByPeriod: Map<string, PlannerRow>;
 };
 
+type TrackerFilters = {
+  assigneeId: string;
+  status: string;
+  priority: string;
+  completion: "all" | "open" | "complete";
+};
+
 type DeadlineAlert = {
   id: string;
   kind: AlertKind;
@@ -215,6 +222,7 @@ const statusOptions: Status[] = ["Ready", "In progress", "Queries", "Review", "U
 const priorityOptions: Priority[] = ["Normal", "Action", "Urgent", "Complete"];
 const clientTypes = ["Limited Company", "Sole Trader", "Self Assessment", "Partnership", "LLP", "Other"];
 const billingFrequencies = ["Monthly", "Quarterly", "Annually", "Hourly", "One-off"];
+const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "open" };
 
 const trackerGroups: Record<TrackerGroupId, string> = {
   tax: "Tax",
@@ -1351,19 +1359,30 @@ function TrackerView({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, 
   onToggle: (id: string) => void; onUpdate: (id: string, patch: Partial<PlannerRow>) => void; onDetail: (id: string, field: string, value: string) => void; onDelete: (id: string) => void;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const spreadsheetLayout = recurringTrackerIds.has(tracker.id) && rows.some((row) => row.isRecurring);
+  const [filters, setFilters] = useState<TrackerFilters>(defaultTrackerFilters);
+  const filteredRows = filterTrackerRows(rows, filters);
+  const spreadsheetLayout = recurringTrackerIds.has(tracker.id) && filteredRows.some((row) => row.isRecurring);
+
+  useEffect(() => {
+    setFilters(defaultTrackerFilters);
+    setConfirmId(null);
+  }, [tracker.id]);
 
   if (spreadsheetLayout) {
     return (
       <RecurringTrackerTable
         tracker={tracker}
-        rows={rows}
+        rows={filteredRows}
+        allRows={rows}
+        allRowsCount={rows.length}
         profiles={profiles}
         isAdmin={isAdmin}
         canEdit={canEdit}
         expandedRows={expandedRows}
         confirmId={confirmId}
         onConfirm={setConfirmId}
+        filters={filters}
+        onFiltersChange={setFilters}
         onToggle={onToggle}
         onUpdate={onUpdate}
         onDetail={onDetail}
@@ -1372,7 +1391,7 @@ function TrackerView({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, 
     );
   }
 
-  return <section className="trackerPanel"><div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}><div><h3>{tracker.name}</h3><p>{tracker.description}</p></div><span>{rows.length} rows</span></div><div className="simpleTableWrap"><table className="simpleTable"><thead><tr><th>Client</th><th>Assignee</th><th>Tracker</th><th>Status</th><th>Period</th><th>Deadline</th><th>Priority</th><th>Notes</th><th>Details</th><th>Actions</th></tr></thead><tbody>{rows.map((row) => {
+  return <section className="trackerPanel"><div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}><div><h3>{tracker.name}</h3><p>{tracker.description}</p></div><span>{filteredRows.length} of {rows.length} rows</span></div><TrackerFilterBar filters={filters} rows={rows} profiles={profiles} onChange={setFilters} /><div className="simpleTableWrap"><table className="simpleTable"><thead><tr><th>Client</th><th>Assignee</th><th>Tracker</th><th>Status</th><th>Period</th><th>Deadline</th><th>Priority</th><th>Notes</th><th>Details</th><th>Actions</th></tr></thead><tbody>{filteredRows.map((row) => {
     const editable = canEdit(row);
     const expanded = expandedRows.includes(row.id);
     const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === row.assigneeId);
@@ -1380,15 +1399,37 @@ function TrackerView({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, 
   })}</tbody></table></div></section>;
 }
 
-function RecurringTrackerTable({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, confirmId, onConfirm, onToggle, onUpdate, onDetail, onDelete }: {
+function TrackerFilterBar({ filters, rows, profiles, onChange }: {
+  filters: TrackerFilters;
+  rows: PlannerRow[];
+  profiles: Profile[];
+  onChange: (filters: TrackerFilters) => void;
+}) {
+  const assigneeOptions = profiles.filter((profile) => rows.some((row) => row.assigneeId === profile.id));
+  return (
+    <div className="trackerFilters" aria-label="Tracker filters">
+      <label><span>Assignee</span><select value={filters.assigneeId} onChange={(event) => onChange({ ...filters, assigneeId: event.target.value })}><option value="all">All</option>{assigneeOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}</select></label>
+      <label><span>Status</span><select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value })}><option value="all">All</option>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+      <label><span>Priority</span><select value={filters.priority} onChange={(event) => onChange({ ...filters, priority: event.target.value })}><option value="all">All</option>{priorityOptions.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select></label>
+      <label><span>Work</span><select value={filters.completion} onChange={(event) => onChange({ ...filters, completion: event.target.value as TrackerFilters["completion"] })}><option value="open">Open</option><option value="all">All</option><option value="complete">Complete</option></select></label>
+      <button className="secondaryButton trackerFilterReset" onClick={() => onChange(defaultTrackerFilters)}>Reset</button>
+    </div>
+  );
+}
+
+function RecurringTrackerTable({ tracker, rows, allRows, allRowsCount, profiles, isAdmin, canEdit, expandedRows, confirmId, onConfirm, filters, onFiltersChange, onToggle, onUpdate, onDetail, onDelete }: {
   tracker: Tracker;
   rows: PlannerRow[];
+  allRows: PlannerRow[];
+  allRowsCount: number;
   profiles: Profile[];
   isAdmin: boolean;
   canEdit: (row: PlannerRow) => boolean;
   expandedRows: string[];
   confirmId: string | null;
   onConfirm: (id: string | null) => void;
+  filters: TrackerFilters;
+  onFiltersChange: (filters: TrackerFilters) => void;
   onToggle: (id: string) => void;
   onUpdate: (id: string, patch: Partial<PlannerRow>) => void;
   onDetail: (id: string, field: string, value: string) => void;
@@ -1397,85 +1438,56 @@ function RecurringTrackerTable({ tracker, rows, profiles, isAdmin, canEdit, expa
   const fixedFields = fixedDetailFieldsForTracker(tracker);
   const periodColumns = getPeriodColumns(rows);
   const groups = groupRowsForSpreadsheet(rows, periodColumns);
-  const colSpan = 2 + fixedFields.length + periodColumns.length;
 
   return (
-    <section className="trackerPanel spreadsheetTrackerPanel">
+    <section className="trackerPanel recurringTrackerPanel">
       <div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}>
         <div><h3>{tracker.name}</h3><p>{tracker.description}</p></div>
-        <span>{groups.length} client{groups.length === 1 ? "" : "s"} | {rows.length} period row{rows.length === 1 ? "" : "s"}</span>
+        <span>{groups.length} client{groups.length === 1 ? "" : "s"} | {rows.length} of {allRowsCount} periods</span>
       </div>
-      <div className="statusLegend" aria-label="Tracker status legend">
-        {statusOptions.map((status, index) => <span key={status}><strong>{index + 1}</strong>{status}</span>)}
-      </div>
-      <div className="simpleTableWrap spreadsheetTableWrap">
-        <table className="spreadsheetTrackerTable">
-          <thead>
-            <tr>
-              <th className="stickyColumn clientColumn">Client</th>
-              <th className="stickyColumn assigneeColumn">Assignee</th>
-              {fixedFields.map((field) => <th key={field} className="fixedDetailColumn">{field}</th>)}
-              {periodColumns.map((period) => <th key={period.key} className="periodColumn">{period.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group) => {
-              const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === group.assigneeId);
-              const primaryRow = group.rows[0];
-              const expanded = group.rows.filter((row) => expandedRows.includes(row.id));
-              return (
-                <Fragment key={group.key}>
-                  <tr>
-                    <td className="stickyColumn clientColumn"><strong>{group.client}</strong></td>
-                    <td className="stickyColumn assigneeColumn">
-                      <select disabled={!isAdmin || !primaryRow} value={group.assigneeId} onChange={(event) => group.rows.forEach((row) => onUpdate(row.id, { assigneeId: event.target.value }))}>
-                        {assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}
-                      </select>
-                    </td>
-                    {fixedFields.map((field) => (
-                      <td className="fixedDetailColumn" key={field}>
-                        <input
-                          disabled={!primaryRow || !canEdit(primaryRow)}
-                          value={primaryRow?.details[field] ?? ""}
-                          onChange={(event) => group.rows.filter((row) => canEdit(row)).forEach((row) => onDetail(row.id, field, event.target.value))}
-                        />
-                      </td>
-                    ))}
-                    {periodColumns.map((period) => {
-                      const row = group.rowsByPeriod.get(period.key);
-                      return <td className="periodWorkCell" key={period.key}>{row ? (
-                        <PeriodWorkCell
-                          row={row}
-                          editable={canEdit(row)}
-                          expanded={expandedRows.includes(row.id)}
-                          confirming={confirmId === row.id}
-                          onToggle={onToggle}
-                          onUpdate={onUpdate}
-                          onConfirm={onConfirm}
-                          onDelete={onDelete}
-                        />
-                      ) : <span className="emptyPeriodCell">-</span>}</td>;
-                    })}
-                  </tr>
-                  {expanded.length ? (
-                    <tr className="spreadsheetDetailsRow">
-                      <td colSpan={colSpan}>
-                        {expanded.map((row) => (
-                          <div className="spreadsheetDetailsPanel" key={row.id}>
-                            <strong>{row.periodLabel || "Once"}</strong>
-                            <div className="detailsGrid">
-                              {tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!canEdit(row)} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}
-                            </div>
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+      <TrackerFilterBar filters={filters} rows={allRows} profiles={profiles} onChange={onFiltersChange} />
+      <div className="recurringClientList">
+        {groups.length ? groups.map((group) => {
+          const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === group.assigneeId);
+          const primaryRow = group.rows[0];
+          const openCount = group.rows.filter((row) => !completeStatuses.has(row.status)).length;
+          return (
+            <article className="recurringClientCard" key={group.key}>
+              <div className="recurringClientHeader">
+                <div><strong>{group.client}</strong><span>{openCount} open of {group.rows.length}</span></div>
+                <label><span>Assignee</span><select disabled={!isAdmin || !primaryRow} value={group.assigneeId} onChange={(event) => group.rows.forEach((row) => onUpdate(row.id, { assigneeId: event.target.value }))}>{assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}</select></label>
+              </div>
+              {fixedFields.length ? (
+                <div className="recurringClientDetails">
+                  {fixedFields.map((field) => <label key={field}><span>{field}</span><input disabled={!primaryRow || !canEdit(primaryRow)} value={primaryRow?.details[field] ?? ""} onChange={(event) => group.rows.filter((row) => canEdit(row)).forEach((row) => onDetail(row.id, field, event.target.value))} /></label>)}
+                </div>
+              ) : null}
+              <div className="periodTileGrid">
+                {group.rows.map((row) => (
+                  <PeriodWorkCell
+                    key={row.id}
+                    row={row}
+                    editable={canEdit(row)}
+                    expanded={expandedRows.includes(row.id)}
+                    confirming={confirmId === row.id}
+                    onToggle={onToggle}
+                    onUpdate={onUpdate}
+                    onConfirm={onConfirm}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </div>
+              {group.rows.filter((row) => expandedRows.includes(row.id)).map((row) => (
+                <div className="recurringDetailsPanel" key={row.id}>
+                  <strong>{row.periodLabel || "Once"}</strong>
+                  <div className="detailsGrid">
+                    {tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!canEdit(row)} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}
+                  </div>
+                </div>
+              ))}
+            </article>
+          );
+        }) : <div className="emptyState"><Search size={24} /><strong>No tracker rows match these filters</strong></div>}
       </div>
     </section>
   );
@@ -1492,15 +1504,16 @@ function PeriodWorkCell({ row, editable, expanded, confirming, onToggle, onUpdat
   onDelete: (id: string) => void;
 }) {
   return (
-    <div className="periodWork">
+    <div className={`periodWork ${statusClass(row.status)}`}>
+      <div className="periodWorkHeader"><strong>{row.periodLabel || "Once"}</strong><span>{formatDateCompact(row.deadlineDate)}</span></div>
       <select disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>
-        {statusOptions.map((status, index) => <option key={status} value={status}>{index + 1} - {status}</option>)}
+        {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
       </select>
       <input disabled={!editable} type="date" value={row.deadlineDate ?? ""} onChange={(event) => onUpdate(row.id, { deadlineDate: event.target.value || null })} />
       <select disabled={!editable} value={row.priority} onChange={(event) => onUpdate(row.id, { priority: event.target.value as Priority })}>
         {priorityOptions.map((priority) => <option key={priority}>{priority}</option>)}
       </select>
-      <textarea disabled={!editable} value={row.notes} placeholder={formatDateCompact(row.periodEnd)} onChange={(event) => onUpdate(row.id, { notes: event.target.value })} />
+      <input disabled={!editable} value={row.notes} placeholder="Notes" onChange={(event) => onUpdate(row.id, { notes: event.target.value })} />
       <div className="periodCellActions">
         <button className="detailsButton" onClick={() => onToggle(row.id)}>{expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}Details</button>
         {editable ? <button className="trackerDeleteButton" onClick={() => { if (confirming) onDelete(row.id); else onConfirm(row.id); }}><Trash2 size={14} />{confirming ? "Confirm" : "Delete"}</button> : <span className="readOnlyTag">View only</span>}
@@ -1555,6 +1568,17 @@ function fixedDetailFieldsForTracker(tracker: Tracker) {
     cis: ["Refund Due"]
   };
   return fieldsByTracker[tracker.id] ?? tracker.detailFields.filter((field) => !monthShortNames().includes(field) && !/^Wk\d+$/i.test(field));
+}
+
+function filterTrackerRows(rows: PlannerRow[], filters: TrackerFilters) {
+  return rows.filter((row) => {
+    if (filters.assigneeId !== "all" && row.assigneeId !== filters.assigneeId) return false;
+    if (filters.status !== "all" && row.status !== filters.status) return false;
+    if (filters.priority !== "all" && row.priority !== filters.priority) return false;
+    if (filters.completion === "open" && completeStatuses.has(row.status)) return false;
+    if (filters.completion === "complete" && !completeStatuses.has(row.status)) return false;
+    return true;
+  });
 }
 
 function getPeriodColumns(rows: PlannerRow[]): PeriodColumn[] {
@@ -1793,6 +1817,10 @@ function formatDateCompact(value: string | null) {
   if (!value) return "";
   const [year, month, day] = value.split("-").map(Number);
   return `${day} ${monthShort(month - 1)} ${year}`;
+}
+
+function statusClass(status: Status) {
+  return status.toLowerCase().replace(/\s+/g, "-");
 }
 
 function recordToProfile(record: ProfileRecord): Profile {

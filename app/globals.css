@@ -2285,6 +2285,174 @@ h3 {
   background: #fff3f1;
 }
 
+.trackerFilters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.trackerFilters label,
+.recurringClientHeader label,
+.recurringClientDetails label {
+  display: grid;
+  gap: 4px;
+}
+
+.trackerFilters span,
+.recurringClientHeader label span,
+.recurringClientDetails span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trackerFilters select,
+.recurringClientHeader select,
+.recurringClientDetails input,
+.periodWork input,
+.periodWork select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 0 8px;
+  outline: 0;
+  border-radius: 7px;
+}
+
+.trackerFilterReset {
+  min-height: 34px;
+  justify-content: center;
+}
+
+.recurringTrackerPanel {
+  overflow: hidden;
+}
+
+.recurringClientList {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #f8fbf9;
+}
+
+.recurringClientCard {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.recurringClientHeader {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 240px);
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border-left: 5px solid var(--accent, var(--brand-green));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent, var(--brand-green)) 12%, #ffffff), #ffffff 62%);
+}
+
+.recurringClientHeader strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 15px;
+}
+
+.recurringClientHeader div > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.recurringClientDetails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 9px;
+  padding: 0 12px 12px;
+}
+
+.periodTileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #fbfdfc;
+}
+
+.periodWork {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--line-strong);
+  background: #fff;
+  border-radius: 8px;
+}
+
+.periodWork.ready {
+  border-top-color: var(--blue);
+}
+
+.periodWork.in-progress,
+.periodWork.review {
+  border-top-color: var(--orange);
+}
+
+.periodWork.queries,
+.periodWork.urgent {
+  border-top-color: var(--red);
+}
+
+.periodWork.filed,
+.periodWork.complete {
+  border-top-color: var(--green);
+  background: #f7fcf8;
+}
+
+.periodWorkHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.periodWorkHeader strong {
+  font-size: 13px;
+}
+
+.periodWorkHeader span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.periodCellActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.periodCellActions .detailsButton,
+.periodCellActions .trackerDeleteButton {
+  min-height: 30px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.recurringDetailsPanel {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #f8fbf9;
+}
+
 .statusLegend {
   display: flex;
   flex-wrap: wrap;
@@ -2398,25 +2566,6 @@ h3 {
   min-height: 44px;
   padding-top: 7px;
   resize: vertical;
-}
-
-.periodWork {
-  display: grid;
-  gap: 6px;
-}
-
-.periodCellActions {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.periodCellActions .detailsButton,
-.periodCellActions .trackerDeleteButton {
-  min-height: 28px;
-  padding: 0 6px;
-  font-size: 12px;
 }
 
 .emptyPeriodCell {
@@ -2534,6 +2683,14 @@ h3 {
 
   .serviceGrid {
     grid-template-columns: repeat(2, minmax(230px, 1fr));
+  }
+
+  .trackerFilters {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .trackerFilterReset {
+    grid-column: span 2;
   }
 }
 
@@ -2676,6 +2833,10 @@ h3 {
   .serviceHeader {
     flex-direction: column;
   }
+
+  .recurringClientHeader {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 680px) {
@@ -2715,8 +2876,15 @@ h3 {
   .clientFormGrid,
   .serviceGrid,
   .feeSummary,
-  .workloadColumns {
+  .workloadColumns,
+  .trackerFilters,
+  .periodTileGrid,
+  .recurringClientDetails {
     grid-template-columns: 1fr;
+  }
+
+  .trackerFilterReset {
+    grid-column: auto;
   }
 
   .contactRow,
@@ -2883,6 +3051,18 @@ h3 {
   .simpleTable textarea {
     border-color: var(--line);
     padding: 0 8px;
+  }
+
+  .recurringTrackerPanel {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .recurringClientList {
+    padding: 0;
+    background: transparent;
   }
 
   .spreadsheetTrackerPanel {
