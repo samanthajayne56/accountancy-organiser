@@ -1438,56 +1438,88 @@ function RecurringTrackerTable({ tracker, rows, allRows, allRowsCount, profiles,
   const fixedFields = fixedDetailFieldsForTracker(tracker);
   const periodColumns = getPeriodColumns(rows);
   const groups = groupRowsForSpreadsheet(rows, periodColumns);
+  const colSpan = 2 + fixedFields.length + periodColumns.length;
 
   return (
-    <section className="trackerPanel recurringTrackerPanel">
+    <section className="trackerPanel spreadsheetTrackerPanel">
       <div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}>
         <div><h3>{tracker.name}</h3><p>{tracker.description}</p></div>
         <span>{groups.length} client{groups.length === 1 ? "" : "s"} | {rows.length} of {allRowsCount} periods</span>
       </div>
       <TrackerFilterBar filters={filters} rows={allRows} profiles={profiles} onChange={onFiltersChange} />
-      <div className="recurringClientList">
-        {groups.length ? groups.map((group) => {
-          const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === group.assigneeId);
-          const primaryRow = group.rows[0];
-          const openCount = group.rows.filter((row) => !completeStatuses.has(row.status)).length;
-          return (
-            <article className="recurringClientCard" key={group.key}>
-              <div className="recurringClientHeader">
-                <div><strong>{group.client}</strong><span>{openCount} open of {group.rows.length}</span></div>
-                <label><span>Assignee</span><select disabled={!isAdmin || !primaryRow} value={group.assigneeId} onChange={(event) => group.rows.forEach((row) => onUpdate(row.id, { assigneeId: event.target.value }))}>{assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}</select></label>
-              </div>
-              {fixedFields.length ? (
-                <div className="recurringClientDetails">
-                  {fixedFields.map((field) => <label key={field}><span>{field}</span><input disabled={!primaryRow || !canEdit(primaryRow)} value={primaryRow?.details[field] ?? ""} onChange={(event) => group.rows.filter((row) => canEdit(row)).forEach((row) => onDetail(row.id, field, event.target.value))} /></label>)}
-                </div>
-              ) : null}
-              <div className="periodTileGrid">
-                {group.rows.map((row) => (
-                  <PeriodWorkCell
-                    key={row.id}
-                    row={row}
-                    editable={canEdit(row)}
-                    expanded={expandedRows.includes(row.id)}
-                    confirming={confirmId === row.id}
-                    onToggle={onToggle}
-                    onUpdate={onUpdate}
-                    onConfirm={onConfirm}
-                    onDelete={onDelete}
-                  />
-                ))}
-              </div>
-              {group.rows.filter((row) => expandedRows.includes(row.id)).map((row) => (
-                <div className="recurringDetailsPanel" key={row.id}>
-                  <strong>{row.periodLabel || "Once"}</strong>
-                  <div className="detailsGrid">
-                    {tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!canEdit(row)} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}
-                  </div>
-                </div>
-              ))}
-            </article>
-          );
-        }) : <div className="emptyState"><Search size={24} /><strong>No tracker rows match these filters</strong></div>}
+      <div className="statusLegend" aria-label="Tracker status legend">
+        {statusOptions.map((status, index) => <span key={status}><strong>{index + 1}</strong>{status}</span>)}
+      </div>
+      <div className="simpleTableWrap spreadsheetTableWrap">
+        {groups.length ? (
+          <table className="spreadsheetTrackerTable">
+            <thead>
+              <tr>
+                <th className="stickyColumn clientColumn">Client</th>
+                <th className="stickyColumn assigneeColumn">Assignee</th>
+                {fixedFields.map((field) => <th key={field} className="fixedDetailColumn">{field}</th>)}
+                {periodColumns.map((period) => <th key={period.key} className="periodColumn">{period.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((group) => {
+                const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === group.assigneeId);
+                const primaryRow = group.rows[0];
+                const expanded = group.rows.filter((row) => expandedRows.includes(row.id));
+                return (
+                  <Fragment key={group.key}>
+                    <tr>
+                      <td className="stickyColumn clientColumn"><strong>{group.client}</strong></td>
+                      <td className="stickyColumn assigneeColumn">
+                        <select disabled={!isAdmin || !primaryRow} value={group.assigneeId} onChange={(event) => group.rows.forEach((row) => onUpdate(row.id, { assigneeId: event.target.value }))}>
+                          {assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}
+                        </select>
+                      </td>
+                      {fixedFields.map((field) => (
+                        <td className="fixedDetailColumn" key={field}>
+                          <input
+                            disabled={!primaryRow || !canEdit(primaryRow)}
+                            value={primaryRow?.details[field] ?? ""}
+                            onChange={(event) => group.rows.filter((row) => canEdit(row)).forEach((row) => onDetail(row.id, field, event.target.value))}
+                          />
+                        </td>
+                      ))}
+                      {periodColumns.map((period) => {
+                        const row = group.rowsByPeriod.get(period.key);
+                        return <td className="periodWorkCell" key={period.key}>{row ? (
+                          <PeriodWorkCell
+                            row={row}
+                            editable={canEdit(row)}
+                            expanded={expandedRows.includes(row.id)}
+                            confirming={confirmId === row.id}
+                            onToggle={onToggle}
+                            onUpdate={onUpdate}
+                            onConfirm={onConfirm}
+                            onDelete={onDelete}
+                          />
+                        ) : <span className="emptyPeriodCell">-</span>}</td>;
+                      })}
+                    </tr>
+                    {expanded.length ? (
+                      <tr className="spreadsheetDetailsRow">
+                        <td colSpan={colSpan}>
+                          {expanded.map((row) => (
+                            <div className="spreadsheetDetailsPanel" key={row.id}>
+                              <strong>{row.periodLabel || "Once"}</strong>
+                              <div className="detailsGrid">
+                                {tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!canEdit(row)} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}
+                              </div>
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : <div className="emptyState"><Search size={24} /><strong>No tracker rows match these filters</strong></div>}
       </div>
     </section>
   );
@@ -1504,16 +1536,15 @@ function PeriodWorkCell({ row, editable, expanded, confirming, onToggle, onUpdat
   onDelete: (id: string) => void;
 }) {
   return (
-    <div className={`periodWork ${statusClass(row.status)}`}>
-      <div className="periodWorkHeader"><strong>{row.periodLabel || "Once"}</strong><span>{formatDateCompact(row.deadlineDate)}</span></div>
+    <div className="periodWork">
       <select disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>
-        {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+        {statusOptions.map((status, index) => <option key={status} value={status}>{index + 1} - {status}</option>)}
       </select>
       <input disabled={!editable} type="date" value={row.deadlineDate ?? ""} onChange={(event) => onUpdate(row.id, { deadlineDate: event.target.value || null })} />
       <select disabled={!editable} value={row.priority} onChange={(event) => onUpdate(row.id, { priority: event.target.value as Priority })}>
         {priorityOptions.map((priority) => <option key={priority}>{priority}</option>)}
       </select>
-      <input disabled={!editable} value={row.notes} placeholder="Notes" onChange={(event) => onUpdate(row.id, { notes: event.target.value })} />
+      <textarea disabled={!editable} value={row.notes} placeholder={formatDateCompact(row.periodEnd)} onChange={(event) => onUpdate(row.id, { notes: event.target.value })} />
       <div className="periodCellActions">
         <button className="detailsButton" onClick={() => onToggle(row.id)}>{expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}Details</button>
         {editable ? <button className="trackerDeleteButton" onClick={() => { if (confirming) onDelete(row.id); else onConfirm(row.id); }}><Trash2 size={14} />{confirming ? "Confirm" : "Delete"}</button> : <span className="readOnlyTag">View only</span>}

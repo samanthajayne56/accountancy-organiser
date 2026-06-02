@@ -2568,6 +2568,29 @@ h3 {
   resize: vertical;
 }
 
+.spreadsheetTrackerTable .periodWork {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.spreadsheetTrackerTable .periodCellActions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.spreadsheetTrackerTable .periodCellActions .detailsButton,
+.spreadsheetTrackerTable .periodCellActions .trackerDeleteButton {
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
 .emptyPeriodCell {
   display: grid;
   place-items: center;
