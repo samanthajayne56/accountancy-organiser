@@ -133,6 +133,7 @@ type TrackerFilters = {
   status: string;
   priority: string;
   completion: "all" | "open" | "complete";
+  period: string;
 };
 
 type DeadlineAlert = {
@@ -224,7 +225,7 @@ const statusOptions: Status[] = ["Ready", "In progress", "Queries", "Review", "U
 const priorityOptions: Priority[] = ["Normal", "Action", "Urgent", "Complete"];
 const clientTypes = ["Limited Company", "Sole Trader", "Self Assessment", "Partnership", "LLP", "Other"];
 const billingFrequencies = ["Monthly", "Quarterly", "Annually", "Hourly", "One-off"];
-const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "open" };
+const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "open", period: "all" };
 
 const trackerGroups: Record<TrackerGroupId, string> = {
   tax: "Tax",
@@ -279,7 +280,6 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>("dashboard");
   const [trackersOpen, setTrackersOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState("all");
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
@@ -433,10 +433,6 @@ export default function Home() {
   }, [profiles]);
 
   useEffect(() => {
-    setSelectedPeriodFilter("all");
-  }, [activeView]);
-
-  useEffect(() => {
     if (!notice) return;
     const id = window.setTimeout(() => setNotice(""), 3000);
     return () => window.clearTimeout(id);
@@ -460,9 +456,8 @@ export default function Home() {
     ? approvedClients.filter((client) => (client.serviceIds ?? []).includes(activeTracker.id))
     : [];
   const trackerRows = activeTracker
-    ? sortTrackerRows(filteredRows.filter((row) => row.trackerId === activeTracker.id && matchesQuery(row, query) && matchesPeriodFilter(row, selectedPeriodFilter)))
+    ? sortTrackerRows(filteredRows.filter((row) => row.trackerId === activeTracker.id && matchesQuery(row, query)))
     : [];
-  const periodFilterOptions = activeTracker ? getPeriodFilterOptions(activeTracker, filteredRows.filter((row) => row.trackerId === activeTracker.id && matchesQuery(row, query))) : [];
 
   function canEditRow(row: PlannerRow) {
     return isAdmin || row.assigneeId === profile?.id;
@@ -898,12 +893,6 @@ export default function Home() {
             {activeTracker ? (
               <>
                 <label className="searchBox"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tracker" /></label>
-                {activeTracker.id !== "fixed-fees" && periodFilterOptions.length ? (
-                  <label className="selectBox periodFilter"><CalendarDays size={16} /><select value={selectedPeriodFilter} onChange={(event) => setSelectedPeriodFilter(event.target.value)}>
-                    <option value="all">All periods</option>
-                    {periodFilterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select></label>
-                ) : null}
                 {activeTracker.id !== "fixed-fees" ? <button className="primaryButton" onClick={beginNewTask}><CirclePlus size={18} />Add row</button> : null}
               </>
             ) : null}
@@ -1438,9 +1427,11 @@ function TrackerFilterBar({ filters, rows, profiles, onChange }: {
   onChange: (filters: TrackerFilters) => void;
 }) {
   const assigneeOptions = profiles.filter((profile) => rows.some((row) => row.assigneeId === profile.id));
+  const periodOptions = getTrackerPeriodFilterOptions(rows);
   return (
     <div className="trackerFilters" aria-label="Tracker filters">
       <label><span>Assignee</span><select value={filters.assigneeId} onChange={(event) => onChange({ ...filters, assigneeId: event.target.value })}><option value="all">All</option>{assigneeOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}</select></label>
+      <label><span>Period</span><select value={filters.period} onChange={(event) => onChange({ ...filters, period: event.target.value })}><option value="all">All periods</option>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <label><span>Status</span><select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value })}><option value="all">All</option>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
       <label><span>Priority</span><select value={filters.priority} onChange={(event) => onChange({ ...filters, priority: event.target.value })}><option value="all">All</option>{priorityOptions.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select></label>
       <label><span>Work</span><select value={filters.completion} onChange={(event) => onChange({ ...filters, completion: event.target.value as TrackerFilters["completion"] })}><option value="open">Open</option><option value="all">All</option><option value="complete">Complete</option></select></label>
@@ -1647,12 +1638,42 @@ function isPayrollFrequency(value: unknown): value is PayrollFrequency {
 function filterTrackerRows(rows: PlannerRow[], filters: TrackerFilters) {
   return rows.filter((row) => {
     if (filters.assigneeId !== "all" && row.assigneeId !== filters.assigneeId) return false;
+    if (filters.period !== "all" && !matchesTrackerPeriodFilter(row, filters.period)) return false;
     if (filters.status !== "all" && row.status !== filters.status) return false;
     if (filters.priority !== "all" && row.priority !== filters.priority) return false;
     if (filters.completion === "open" && completeStatuses.has(row.status)) return false;
     if (filters.completion === "complete" && !completeStatuses.has(row.status)) return false;
     return true;
   });
+}
+
+function getTrackerPeriodFilterOptions(rows: PlannerRow[]) {
+  const options = new Map<string, string>();
+
+  rows.forEach((row) => {
+    monthFilterValuesForRow(row).forEach((value) => options.set(value, monthFilterLabel(value)));
+    const quarterValue = periodFilterValue(row);
+    if (quarterValue) options.set(`quarter:${quarterValue}`, `Quarter: ${periodFilterLabel(row)}`);
+  });
+
+  return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => {
+    const leftSort = periodOptionSortValue(left.value);
+    const rightSort = periodOptionSortValue(right.value);
+    if (leftSort !== rightSort) return leftSort - rightSort;
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function matchesTrackerPeriodFilter(row: PlannerRow, filter: string) {
+  if (filter.startsWith("month:")) {
+    return monthFilterValuesForRow(row).includes(filter);
+  }
+
+  if (filter.startsWith("quarter:")) {
+    return periodFilterValue(row) === filter.replace("quarter:", "");
+  }
+
+  return true;
 }
 
 function isAllowedTrackerPeriod(row: PlannerRow) {
@@ -1880,6 +1901,47 @@ function periodFilterValue(row: PlannerRow) {
   const startYear = month >= 4 ? year : year - 1;
   const quarter = month >= 4 && month <= 6 ? 1 : month >= 7 && month <= 9 ? 2 : month >= 10 && month <= 12 ? 3 : 4;
   return `${startYear}-tq${quarter}`;
+}
+
+function monthFilterValuesForRow(row: PlannerRow) {
+  const start = row.periodStart ?? row.periodEnd ?? row.deadlineDate;
+  const end = row.periodEnd ?? row.periodStart ?? row.deadlineDate;
+  if (!start || !end) return [];
+
+  const [startYear, startMonth] = start.split("-").map(Number);
+  const [endYear, endMonth] = end.split("-").map(Number);
+  const values: string[] = [];
+  let cursor = new Date(startYear, startMonth - 1, 1);
+  const endCursor = new Date(endYear, endMonth - 1, 1);
+
+  while (cursor <= endCursor) {
+    values.push(`month:${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  return values;
+}
+
+function monthFilterLabel(value: string) {
+  const [, date] = value.split(":");
+  const [year, month] = date.split("-").map(Number);
+  return `Month: ${monthShort(month - 1)} ${year}`;
+}
+
+function periodOptionSortValue(value: string) {
+  if (value.startsWith("month:")) {
+    const [, date] = value.split(":");
+    const [year, month] = date.split("-").map(Number);
+    return new Date(year, month - 1, 1).getTime();
+  }
+
+  if (value.startsWith("quarter:")) {
+    const [, quarterValue] = value.split(":");
+    const [yearText, quarterText] = quarterValue.split("-tq");
+    return new Date(Number(yearText), (Number(quarterText) - 1) * 3 + 3, 1).getTime() + 1;
+  }
+
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function periodFilterLabel(row: PlannerRow) {
