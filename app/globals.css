@@ -2295,6 +2295,10 @@ h3 {
   background: #fff;
 }
 
+.spreadsheetTrackerPanel .trackerFilters {
+  background: #fbfdfc;
+}
+
 .trackerFilters label,
 .recurringClientHeader label,
 .recurringClientDetails label {
@@ -2457,9 +2461,9 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 14px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background: #fbfdfc;
 }
 
 .statusLegend span {
@@ -2469,7 +2473,7 @@ h3 {
   min-height: 26px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  background: #f8fbf9;
+  background: #fff;
   color: #42504d;
   font-size: 12px;
   border-radius: 7px;
@@ -2492,8 +2496,8 @@ h3 {
 
 .spreadsheetTrackerTable th,
 .spreadsheetTrackerTable td {
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-right: 1px solid #e9efec;
+  border-bottom: 1px solid #e9efec;
   background: #fff;
   vertical-align: top;
 }
@@ -2504,14 +2508,14 @@ h3 {
   z-index: 3;
   min-height: 42px;
   padding: 8px;
-  background: #edf8ef;
+  background: #f1f7f4;
   color: #1e302c;
   font-size: 12px;
   text-align: left;
 }
 
 .spreadsheetTrackerTable td {
-  padding: 7px;
+  padding: 6px;
 }
 
 .spreadsheetTrackerTable .stickyColumn {
@@ -2536,7 +2540,7 @@ h3 {
 }
 
 .spreadsheetTrackerTable td.stickyColumn {
-  background: #fff;
+  background: #fbfdfc;
 }
 
 .spreadsheetTrackerTable .fixedDetailColumn {
@@ -2554,23 +2558,24 @@ h3 {
 .spreadsheetTrackerTable select,
 .spreadsheetTrackerTable textarea {
   width: 100%;
-  min-height: 30px;
-  border: 1px solid var(--line);
+  min-height: 28px;
+  border: 1px solid #e1e9e5;
   background: #fff;
   outline: 0;
   padding: 0 7px;
+  color: #263432;
   border-radius: 6px;
 }
 
 .spreadsheetTrackerTable textarea {
-  min-height: 44px;
-  padding-top: 7px;
+  min-height: 36px;
+  padding-top: 6px;
   resize: vertical;
 }
 
 .spreadsheetTrackerTable .periodWork {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   padding: 0;
   border: 0;
   background: transparent;

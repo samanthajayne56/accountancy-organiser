@@ -31,10 +31,12 @@ type ClientStatus = "pending" | "approved" | "rejected";
 type AlertKind = "overdue" | "today" | "soon";
 type TrackerGroupId = "tax" | "companies" | "bookkeeping" | "payroll" | "compliance";
 type QuarterCycle = "jan-apr-jul-oct" | "feb-may-aug-nov" | "mar-jun-sep-dec";
+type PayrollFrequency = "weekly" | "biweekly" | "monthly";
 
 type ServiceRecurrence = {
   isMonthly: boolean;
   quarterCycle: QuarterCycle | null;
+  payrollFrequency: PayrollFrequency | null;
 };
 
 type Profile = {
@@ -175,7 +177,7 @@ type ClientServiceRecord = {
   client_id: string;
   tracker_id: string;
   is_monthly?: boolean | null;
-  quarter_cycle?: QuarterCycle | null;
+  quarter_cycle?: QuarterCycle | PayrollFrequency | null;
 };
 
 type ClientContactRecord = {
@@ -254,12 +256,18 @@ const trackerById = Object.fromEntries(trackers.map((item) => [item.id, item]));
 const serviceTrackers = trackers.filter((item) => item.id !== "fixed-fees");
 const completeStatuses = new Set<Status>(["Filed", "Complete"]);
 const recurringTrackerIds = new Set(["mtd-itsa", "vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "payroll", "cis"]);
-const monthlyTrackerIds = new Set(["vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "payroll", "cis"]);
-const quarterlyTrackerIds = new Set(["mtd-itsa", "vat-returns", "monthly-bk-vat"]);
+const monthlyTrackerIds = new Set(["vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "cis"]);
+const defaultMonthlyTrackerIds = new Set(["monthly-bk-vat", "monthly-bk-non-vat"]);
+const quarterlyTrackerIds = new Set(["mtd-itsa", "vat-returns"]);
 const quarterCycles: { id: QuarterCycle; label: string; months: number[] }[] = [
   { id: "jan-apr-jul-oct", label: "Jan, Apr, Jul, Oct", months: [0, 3, 6, 9] },
   { id: "feb-may-aug-nov", label: "Feb, May, Aug, Nov", months: [1, 4, 7, 10] },
   { id: "mar-jun-sep-dec", label: "Mar, Jun, Sep, Dec", months: [2, 5, 8, 11] }
+];
+const payrollFrequencyOptions: { id: PayrollFrequency; label: string }[] = [
+  { id: "weekly", label: "Weekly pay" },
+  { id: "biweekly", label: "Biweekly pay" },
+  { id: "monthly", label: "Monthly pay" }
 ];
 
 export default function Home() {
@@ -368,7 +376,7 @@ export default function Home() {
     const loadedContacts = (contactsResult.data ?? []) as ClientContactRecord[];
     const loadedFees = (feesResult.data ?? []) as ClientFeeRecord[];
     const loadedClients = ((clientsResult.data ?? []) as ClientRecord[]).map((client) => recordToClient(client, loadedServices, loadedContacts, loadedFees));
-    const loadedRows = ((rowsResult.data ?? []) as PlannerRowRecord[]).map((row) => recordToRow(row, loadedProfiles, loadedClients));
+    const loadedRows = ((rowsResult.data ?? []) as PlannerRowRecord[]).map((row) => recordToRow(row, loadedProfiles, loadedClients)).filter(isAllowedTrackerPeriod);
     setRecurringSchemaReady(nextRecurringSchemaReady);
     setProfile(loadedProfiles.find((staff) => staff.id === user.id) ?? currentProfile);
     setProfiles(loadedProfiles);
@@ -547,7 +555,7 @@ export default function Home() {
               client_id: draftClient.id,
               tracker_id: serviceId,
               is_monthly: recurrence.isMonthly,
-              quarter_cycle: recurrence.quarterCycle
+              quarter_cycle: serviceId === "payroll" ? recurrence.payrollFrequency : recurrence.quarterCycle
             } : {
               client_id: draftClient.id,
               tracker_id: serviceId
@@ -1147,7 +1155,31 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
                   <p>{trackerGroups[service.group]}</p>
                   {recurringSchemaReady && selected && recurringTrackerIds.has(service.id) ? (
                     <div className="recurrenceControls">
-                      {monthlyTrackerIds.has(service.id) ? (
+                      {service.id === "payroll" ? (
+                        <div className="quarterCycleBlock">
+                          <span className="recurrenceLabel">Payroll frequency</span>
+                          <div className="quarterCycleGroup" aria-label="Payroll frequency">
+                            {payrollFrequencyOptions.map((frequency) => (
+                              <label className="recurrenceOption" key={frequency.id}>
+                                <input
+                                  type="radio"
+                                  name={`${draft.id}-${service.id}-payroll-frequency`}
+                                  disabled={!editable}
+                                  checked={recurrence.payrollFrequency === frequency.id}
+                                  onChange={() => onChange({
+                                    ...draft,
+                                    serviceRecurrences: {
+                                      ...draft.serviceRecurrences,
+                                      [service.id]: normalizeRecurrence(service.id, { ...recurrence, payrollFrequency: frequency.id })
+                                    }
+                                  })}
+                                />
+                                <span>{frequency.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ) : monthlyTrackerIds.has(service.id) ? (
                         <label className="recurrenceOption">
                           <input
                             type="checkbox"
@@ -1562,9 +1594,12 @@ function tracker(id: string, name: string, sourceSheet: string, group: TrackerGr
 }
 
 function normalizeRecurrence(trackerId: string, recurrence?: Partial<ServiceRecurrence> | null): ServiceRecurrence {
+  const rawCycle = recurrence?.quarterCycle;
+  const rawPayrollFrequency = recurrence?.payrollFrequency ?? (typeof rawCycle === "string" && isPayrollFrequency(rawCycle) ? rawCycle : null);
   return {
-    isMonthly: monthlyTrackerIds.has(trackerId) ? Boolean(recurrence?.isMonthly) : false,
-    quarterCycle: quarterlyTrackerIds.has(trackerId) ? recurrence?.quarterCycle ?? null : null
+    isMonthly: monthlyTrackerIds.has(trackerId) ? defaultMonthlyTrackerIds.has(trackerId) ? recurrence?.isMonthly !== false : Boolean(recurrence?.isMonthly) : false,
+    quarterCycle: quarterlyTrackerIds.has(trackerId) && isQuarterCycle(rawCycle) ? rawCycle : null,
+    payrollFrequency: trackerId === "payroll" ? rawPayrollFrequency ?? "monthly" : null
   };
 }
 
@@ -1601,6 +1636,14 @@ function fixedDetailFieldsForTracker(tracker: Tracker) {
   return fieldsByTracker[tracker.id] ?? tracker.detailFields.filter((field) => !monthShortNames().includes(field) && !/^Wk\d+$/i.test(field));
 }
 
+function isQuarterCycle(value: unknown): value is QuarterCycle {
+  return quarterCycles.some((cycle) => cycle.id === value);
+}
+
+function isPayrollFrequency(value: unknown): value is PayrollFrequency {
+  return payrollFrequencyOptions.some((frequency) => frequency.id === value);
+}
+
 function filterTrackerRows(rows: PlannerRow[], filters: TrackerFilters) {
   return rows.filter((row) => {
     if (filters.assigneeId !== "all" && row.assigneeId !== filters.assigneeId) return false;
@@ -1610,6 +1653,13 @@ function filterTrackerRows(rows: PlannerRow[], filters: TrackerFilters) {
     if (filters.completion === "complete" && !completeStatuses.has(row.status)) return false;
     return true;
   });
+}
+
+function isAllowedTrackerPeriod(row: PlannerRow) {
+  if ((row.trackerId === "monthly-bk-vat" || row.trackerId === "monthly-bk-non-vat") && row.isRecurring) {
+    return !row.recurrenceKey?.includes(":quarterly:") && !/^Q\d\b/.test(row.periodLabel);
+  }
+  return true;
 }
 
 function getPeriodColumns(rows: PlannerRow[]): PeriodColumn[] {
@@ -1692,6 +1742,20 @@ function createPeriodsForTracker(trackerId: string, recurrence: ServiceRecurrenc
   const periods: { label: string; start: string; end: string; recurrenceKey: string }[] = [];
   const { startYear, endYear } = currentTaxYear();
 
+  if (trackerId === "payroll") {
+    const frequency = recurrence.payrollFrequency ?? "monthly";
+    if (frequency === "monthly") {
+      taxYearMonths(startYear, endYear).forEach(({ year, month }) => {
+        const start = toDateString(year, month, 1);
+        const end = toDateString(year, month, lastDayOfMonth(year, month));
+        periods.push({ label: monthLabel(year, month), start, end, recurrenceKey: `${trackerId}:monthly:${start}` });
+      });
+      return periods;
+    }
+
+    return createRollingPayrollPeriods(trackerId, frequency, startYear, endYear);
+  }
+
   if (recurrence.isMonthly) {
     taxYearMonths(startYear, endYear).forEach(({ year, month }) => {
       const start = toDateString(year, month, 1);
@@ -1713,6 +1777,27 @@ function createPeriodsForTracker(trackerId: string, recurrence: ServiceRecurrenc
       const label = `Q${index + 1} ${monthShort(startDate.getMonth())}-${monthShort(endMonth)} ${year}`;
       periods.push({ label, start, end, recurrenceKey: `${trackerId}:quarterly:${recurrence.quarterCycle}:${end}` });
     });
+  }
+
+  return periods;
+}
+
+function createRollingPayrollPeriods(trackerId: string, frequency: Exclude<PayrollFrequency, "monthly">, startYear: number, endYear: number) {
+  const periods: { label: string; start: string; end: string; recurrenceKey: string }[] = [];
+  const stepDays = frequency === "weekly" ? 7 : 14;
+  const prefix = frequency === "weekly" ? "Wk" : "BW";
+  const taxYearEnd = new Date(endYear, 2, 31);
+  let startDate = new Date(startYear, 3, 1);
+  let index = 1;
+
+  while (startDate <= taxYearEnd) {
+    const endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + stepDays - 1);
+    const cappedEndDate = endDate > taxYearEnd ? taxYearEnd : endDate;
+    const start = toDateString(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const end = toDateString(cappedEndDate.getFullYear(), cappedEndDate.getMonth(), cappedEndDate.getDate());
+    periods.push({ label: `${prefix} ${index} ${monthShort(startDate.getMonth())} ${startDate.getDate()}-${monthShort(cappedEndDate.getMonth())} ${cappedEndDate.getDate()}`, start, end, recurrenceKey: `${trackerId}:${frequency}:${start}` });
+    startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + stepDays);
+    index += 1;
   }
 
   return periods;
@@ -1872,7 +1957,7 @@ function recordToClient(record: ClientRecord, services: ClientServiceRecord[], c
     reviewedAt: record.reviewed_at,
     rejectionReason: record.rejection_reason ?? "",
     serviceIds: clientServices.map((service) => service.tracker_id),
-    serviceRecurrences: Object.fromEntries(clientServices.map((service) => [service.tracker_id, normalizeRecurrence(service.tracker_id, { isMonthly: Boolean(service.is_monthly), quarterCycle: service.quarter_cycle ?? null })])),
+    serviceRecurrences: Object.fromEntries(clientServices.map((service) => [service.tracker_id, normalizeRecurrence(service.tracker_id, { isMonthly: Boolean(service.is_monthly), quarterCycle: isQuarterCycle(service.quarter_cycle) ? service.quarter_cycle : null, payrollFrequency: isPayrollFrequency(service.quarter_cycle) ? service.quarter_cycle : null })])),
     contacts: contacts.filter((contact) => contact.client_id === record.id).map((contact) => ({ id: contact.id, fullName: contact.full_name, role: contact.role ?? "", email: contact.email ?? "" })),
     fees: fees.filter((fee) => fee.client_id === record.id).map((fee) => ({ id: fee.id, description: fee.description, billingFrequency: fee.billing_frequency, amount: String(fee.amount), notes: fee.notes ?? "" }))
   };
