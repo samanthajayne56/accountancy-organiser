@@ -1431,7 +1431,7 @@ function TrackerFilterBar({ filters, rows, profiles, onChange }: {
   return (
     <div className="trackerFilters" aria-label="Tracker filters">
       <label><span>Assignee</span><select value={filters.assigneeId} onChange={(event) => onChange({ ...filters, assigneeId: event.target.value })}><option value="all">All</option>{assigneeOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}</select></label>
-      <label><span>Period</span><select value={filters.period} onChange={(event) => onChange({ ...filters, period: event.target.value })}><option value="all">All periods</option>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label><span>Period</span><select value={filters.period} onChange={(event) => onChange({ ...filters, period: event.target.value })}><option value="all">(Select All)</option>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <label><span>Status</span><select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value })}><option value="all">All</option>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
       <label><span>Priority</span><select value={filters.priority} onChange={(event) => onChange({ ...filters, priority: event.target.value })}><option value="all">All</option>{priorityOptions.map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select></label>
       <label><span>Work</span><select value={filters.completion} onChange={(event) => onChange({ ...filters, completion: event.target.value as TrackerFilters["completion"] })}><option value="open">Open</option><option value="all">All</option><option value="complete">Complete</option></select></label>
@@ -1648,32 +1648,33 @@ function filterTrackerRows(rows: PlannerRow[], filters: TrackerFilters) {
 }
 
 function getTrackerPeriodFilterOptions(rows: PlannerRow[]) {
-  const options = new Map<string, string>();
-
-  rows.forEach((row) => {
-    monthFilterValuesForRow(row).forEach((value) => options.set(value, monthFilterLabel(value)));
-    const quarterValue = periodFilterValue(row);
-    if (quarterValue) options.set(`quarter:${quarterValue}`, `Quarter: ${periodFilterLabel(row)}`);
-  });
-
-  return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => {
-    const leftSort = periodOptionSortValue(left.value);
-    const rightSort = periodOptionSortValue(right.value);
-    if (leftSort !== rightSort) return leftSort - rightSort;
-    return left.label.localeCompare(right.label);
-  });
+  const options = [
+    { value: "cycle:feb-may-aug-nov", label: "Feb, May, Aug, Nov" },
+    { value: "cycle:jan-apr-jul-oct", label: "Jan,Apr,Jul,Oct" },
+    { value: "cycle:mar-jun-sep-dec", label: "Mar, Jun, Sep, Dec" },
+    { value: "monthly", label: "Monthly" }
+  ];
+  return options.filter((option) => rows.some((row) => matchesTrackerPeriodFilter(row, option.value)));
 }
 
 function matchesTrackerPeriodFilter(row: PlannerRow, filter: string) {
-  if (filter.startsWith("month:")) {
-    return monthFilterValuesForRow(row).includes(filter);
+  if (filter === "monthly") {
+    return row.recurrenceKey?.includes(":monthly:") ?? false;
   }
 
-  if (filter.startsWith("quarter:")) {
-    return periodFilterValue(row) === filter.replace("quarter:", "");
+  if (filter.startsWith("cycle:")) {
+    const cycleId = filter.replace("cycle:", "") as QuarterCycle;
+    return row.recurrenceKey?.includes(`:quarterly:${cycleId}:`) ?? matchesQuarterCycleByEndMonth(row, cycleId);
   }
 
   return true;
+}
+
+function matchesQuarterCycleByEndMonth(row: PlannerRow, cycleId: QuarterCycle) {
+  const date = row.periodEnd ?? row.periodStart ?? row.deadlineDate;
+  if (!date) return false;
+  const monthIndex = Number(date.split("-")[1]) - 1;
+  return quarterCycles.find((cycle) => cycle.id === cycleId)?.months.includes(monthIndex) ?? false;
 }
 
 function isAllowedTrackerPeriod(row: PlannerRow) {
