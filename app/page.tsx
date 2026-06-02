@@ -807,7 +807,65 @@ export default function Home() {
     if (error) {
       setErrorMessage(`Could not save work: ${error.message}`);
       await loadSharedData();
+      return;
     }
+
+    if (patch.status && completeStatuses.has(updated.status) && !completeStatuses.has(current.status)) {
+      const nextError = await createNextRecurringTrackerRow(updated);
+      if (nextError) {
+        setErrorMessage(`Work saved, but the next recurring deadline could not be created: ${nextError}`);
+      }
+    }
+  }
+
+  async function createNextRecurringTrackerRow(row: PlannerRow) {
+    if (!profile || !recurringSchemaReady || !row.isRecurring || !row.recurrenceKey) return null;
+    const tracker = trackerById[row.trackerId];
+    if (!tracker || !recurringTrackerIds.has(tracker.id)) return null;
+
+    const nextPeriod = createNextPeriodForRow(row);
+    if (!nextPeriod) return null;
+
+    const nextRecurrenceKey = `${row.clientId}:${nextPeriod.recurrenceKey}`;
+    const existsInState = rows.some((item) => item.clientId === row.clientId && item.trackerId === row.trackerId && item.recurrenceKey === nextRecurrenceKey);
+    if (existsInState) return null;
+
+    const { data, error } = await supabase
+      .from("planner_rows")
+      .select("id")
+      .eq("client_id", row.clientId)
+      .eq("tracker_id", row.trackerId)
+      .eq("recurrence_key", nextRecurrenceKey)
+      .maybeSingle();
+    if (error) return error.message;
+    if (data) return null;
+
+    const nextRow: PlannerRow = {
+      id: crypto.randomUUID(),
+      clientId: row.clientId,
+      client: row.client,
+      assigneeId: row.assigneeId,
+      assignee: row.assignee,
+      team: row.team,
+      trackerId: row.trackerId,
+      status: "Ready",
+      priority: "Normal",
+      deadlineDate: defaultDeadlineForPeriod(row.trackerId, nextPeriod.end),
+      periodLabel: nextPeriod.label,
+      periodStart: nextPeriod.start,
+      periodEnd: nextPeriod.end,
+      isRecurring: true,
+      recurrenceKey: nextRecurrenceKey,
+      notes: "",
+      details: { ...row.details }
+    };
+
+    const { error: insertError } = await supabase.from("planner_rows").insert(rowToRecord(nextRow, profile.id));
+    if (insertError) return insertError.message;
+
+    setRows((items) => [...items, nextRow]);
+    setNotice(`Next ${tracker.name} deadline created.`);
+    return null;
   }
 
   async function updateDetail(rowId: string, field: string, value: string) {
@@ -1808,6 +1866,94 @@ function createPeriodsForTracker(trackerId: string, recurrence: ServiceRecurrenc
   return periods;
 }
 
+function createNextPeriodForRow(row: PlannerRow) {
+  if (!row.periodStart || !row.periodEnd || !row.recurrenceKey) return null;
+  const startDate = parseDateString(row.periodStart);
+  const endDate = parseDateString(row.periodEnd);
+  if (!startDate || !endDate) return null;
+
+  if (row.recurrenceKey.includes(":weekly:")) {
+    const nextStart = addDays(startDate, 7);
+    const nextEnd = addDays(endDate, 7);
+    return payrollPeriod(row.trackerId, "weekly", nextStart, nextEnd);
+  }
+
+  if (row.recurrenceKey.includes(":biweekly:")) {
+    const nextStart = addDays(startDate, 14);
+    const nextEnd = addDays(endDate, 14);
+    return payrollPeriod(row.trackerId, "biweekly", nextStart, nextEnd);
+  }
+
+  if (row.recurrenceKey.includes(":monthly:")) {
+    const nextStart = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+    const nextEnd = new Date(nextStart.getFullYear(), nextStart.getMonth(), lastDayOfMonth(nextStart.getFullYear(), nextStart.getMonth()));
+    const label = row.trackerId === "cis" ? `M${taxMonthNumber(nextStart.getMonth())} ${monthLabel(nextStart.getFullYear(), nextStart.getMonth())}` : monthLabel(nextStart.getFullYear(), nextStart.getMonth());
+    return {
+      label,
+      start: toDateString(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate()),
+      end: toDateString(nextEnd.getFullYear(), nextEnd.getMonth(), nextEnd.getDate()),
+      recurrenceKey: `${row.trackerId}:monthly:${toDateString(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate())}`
+    };
+  }
+
+  const cycleId = quarterCycles.find((cycle) => row.recurrenceKey?.includes(`:quarterly:${cycle.id}:`))?.id;
+  if (cycleId) {
+    const nextQuarter = nextQuarterPeriod(row.trackerId, cycleId, endDate);
+    if (nextQuarter) return nextQuarter;
+  }
+
+  return null;
+}
+
+function nextQuarterPeriod(trackerId: string, cycleId: QuarterCycle, currentEndDate: Date) {
+  const cycle = quarterCycles.find((item) => item.id === cycleId);
+  if (!cycle) return null;
+
+  const candidates = cycle.months
+    .flatMap((month) => [currentEndDate.getFullYear(), currentEndDate.getFullYear() + 1].map((year) => ({ month, year })))
+    .map(({ month, year }) => new Date(year, month, lastDayOfMonth(year, month)))
+    .filter((date) => date > currentEndDate)
+    .sort((left, right) => left.getTime() - right.getTime());
+  const nextEnd = candidates[0];
+  if (!nextEnd) return null;
+
+  const nextStart = new Date(nextEnd.getFullYear(), nextEnd.getMonth() - 2, 1);
+  const start = toDateString(nextStart.getFullYear(), nextStart.getMonth(), nextStart.getDate());
+  const end = toDateString(nextEnd.getFullYear(), nextEnd.getMonth(), nextEnd.getDate());
+  return {
+    label: quarterPeriodLabel(cycleId, nextEnd),
+    start,
+    end,
+    recurrenceKey: `${trackerId}:quarterly:${cycleId}:${end}`
+  };
+}
+
+function quarterPeriodLabel(cycleId: QuarterCycle, endDate: Date) {
+  const cycle = quarterCycles.find((item) => item.id === cycleId);
+  const startYear = endDate.getMonth() >= 3 ? endDate.getFullYear() : endDate.getFullYear() - 1;
+  const cycleMonths = (cycle?.months ?? [])
+    .map((endMonth) => ({ endMonth, year: endMonth >= 3 ? startYear : startYear + 1 }))
+    .sort((left, right) => new Date(left.year, left.endMonth).getTime() - new Date(right.year, right.endMonth).getTime());
+  const index = Math.max(0, cycleMonths.findIndex((item) => item.endMonth === endDate.getMonth() && item.year === endDate.getFullYear()));
+  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 2, 1);
+  return `Q${index + 1} ${monthShort(startDate.getMonth())}-${monthShort(endDate.getMonth())} ${endDate.getFullYear()}`;
+}
+
+function payrollPeriod(trackerId: string, frequency: Exclude<PayrollFrequency, "monthly">, startDate: Date, endDate: Date) {
+  const prefix = frequency === "weekly" ? "Wk" : "BW";
+  const taxYearStart = startDate.getMonth() >= 3 ? new Date(startDate.getFullYear(), 3, 1) : new Date(startDate.getFullYear() - 1, 3, 1);
+  const stepDays = frequency === "weekly" ? 7 : 14;
+  const index = Math.floor((startDate.getTime() - taxYearStart.getTime()) / (stepDays * 86400000)) + 1;
+  const start = toDateString(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = toDateString(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  return {
+    label: `${prefix} ${index} ${monthShort(startDate.getMonth())} ${startDate.getDate()}-${monthShort(endDate.getMonth())} ${endDate.getDate()}`,
+    start,
+    end,
+    recurrenceKey: `${trackerId}:${frequency}:${start}`
+  };
+}
+
 function createRollingPayrollPeriods(trackerId: string, frequency: Exclude<PayrollFrequency, "monthly">, startYear: number, endYear: number) {
   const periods: { label: string; start: string; end: string; recurrenceKey: string }[] = [];
   const stepDays = frequency === "weekly" ? 7 : 14;
@@ -1858,6 +2004,17 @@ function taxMonthNumber(month: number) {
 
 function lastDayOfMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
+}
+
+function parseDateString(value: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 function toDateString(year: number, month: number, day: number) {
