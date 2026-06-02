@@ -260,6 +260,9 @@ const recurringTrackerIds = new Set(["mtd-itsa", "vat-returns", "monthly-bk-vat"
 const monthlyTrackerIds = new Set(["vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "cis"]);
 const defaultMonthlyTrackerIds = new Set(["monthly-bk-vat", "monthly-bk-non-vat"]);
 const quarterlyTrackerIds = new Set(["mtd-itsa", "vat-returns"]);
+const defaultQuarterCycleByTracker: Partial<Record<string, QuarterCycle>> = {
+  "mtd-itsa": "mar-jun-sep-dec"
+};
 const quarterCycles: { id: QuarterCycle; label: string; months: number[] }[] = [
   { id: "jan-apr-jul-oct", label: "Jan, Apr, Jul, Oct", months: [0, 3, 6, 9] },
   { id: "feb-may-aug-nov", label: "Feb, May, Aug, Nov", months: [1, 4, 7, 10] },
@@ -1382,7 +1385,7 @@ function TrackerView({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, 
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [filters, setFilters] = useState<TrackerFilters>(defaultTrackerFilters);
   const filteredRows = filterTrackerRows(rows, filters);
-  const spreadsheetLayout = recurringTrackerIds.has(tracker.id) && filteredRows.some((row) => row.isRecurring);
+  const spreadsheetLayout = recurringTrackerIds.has(tracker.id);
 
   useEffect(() => {
     setFilters(defaultTrackerFilters);
@@ -1590,7 +1593,7 @@ function normalizeRecurrence(trackerId: string, recurrence?: Partial<ServiceRecu
   const rawPayrollFrequency = recurrence?.payrollFrequency ?? (typeof rawCycle === "string" && isPayrollFrequency(rawCycle) ? rawCycle : null);
   return {
     isMonthly: monthlyTrackerIds.has(trackerId) ? defaultMonthlyTrackerIds.has(trackerId) ? recurrence?.isMonthly !== false : Boolean(recurrence?.isMonthly) : false,
-    quarterCycle: quarterlyTrackerIds.has(trackerId) && isQuarterCycle(rawCycle) ? rawCycle : null,
+    quarterCycle: quarterlyTrackerIds.has(trackerId) ? isQuarterCycle(rawCycle) ? rawCycle : defaultQuarterCycleByTracker[trackerId] ?? null : null,
     payrollFrequency: trackerId === "payroll" ? rawPayrollFrequency ?? "monthly" : null
   };
 }
