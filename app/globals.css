@@ -2285,6 +2285,165 @@ h3 {
   background: #fff3f1;
 }
 
+.statusLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.statusLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  background: #f8fbf9;
+  color: #42504d;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.statusLegend strong {
+  color: var(--ink);
+}
+
+.spreadsheetTableWrap {
+  max-height: calc(100vh - 220px);
+}
+
+.spreadsheetTrackerTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.spreadsheetTrackerTable th,
+.spreadsheetTrackerTable td {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  vertical-align: top;
+}
+
+.spreadsheetTrackerTable th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 42px;
+  padding: 8px;
+  background: #edf8ef;
+  color: #1e302c;
+  font-size: 12px;
+  text-align: left;
+}
+
+.spreadsheetTrackerTable td {
+  padding: 7px;
+}
+
+.spreadsheetTrackerTable .stickyColumn {
+  position: sticky;
+  z-index: 2;
+}
+
+.spreadsheetTrackerTable th.stickyColumn {
+  z-index: 4;
+}
+
+.spreadsheetTrackerTable .clientColumn {
+  left: 0;
+  width: 230px;
+  min-width: 230px;
+}
+
+.spreadsheetTrackerTable .assigneeColumn {
+  left: 230px;
+  width: 145px;
+  min-width: 145px;
+}
+
+.spreadsheetTrackerTable td.stickyColumn {
+  background: #fff;
+}
+
+.spreadsheetTrackerTable .fixedDetailColumn {
+  width: 138px;
+  min-width: 138px;
+}
+
+.spreadsheetTrackerTable .periodColumn,
+.periodWorkCell {
+  width: 176px;
+  min-width: 176px;
+}
+
+.spreadsheetTrackerTable input,
+.spreadsheetTrackerTable select,
+.spreadsheetTrackerTable textarea {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  background: #fff;
+  outline: 0;
+  padding: 0 7px;
+  border-radius: 6px;
+}
+
+.spreadsheetTrackerTable textarea {
+  min-height: 44px;
+  padding-top: 7px;
+  resize: vertical;
+}
+
+.periodWork {
+  display: grid;
+  gap: 6px;
+}
+
+.periodCellActions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.periodCellActions .detailsButton,
+.periodCellActions .trackerDeleteButton {
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.emptyPeriodCell {
+  display: grid;
+  place-items: center;
+  min-height: 138px;
+  color: #9aa7a3;
+  background: #f8fbf9;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+}
+
+.spreadsheetDetailsRow td {
+  background: #f8fbf9;
+  padding: 10px;
+}
+
+.spreadsheetDetailsPanel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.spreadsheetDetailsPanel:last-child {
+  margin-bottom: 0;
+}
+
 .badge {
   display: inline-flex;
   min-height: 22px;
@@ -2724,6 +2883,58 @@ h3 {
   .simpleTable textarea {
     border-color: var(--line);
     padding: 0 8px;
+  }
+
+  .spreadsheetTrackerPanel {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  .spreadsheetTableWrap {
+    overflow: auto;
+    max-height: none;
+    background: #f8fbf9;
+  }
+
+  .spreadsheetTrackerTable {
+    min-width: 940px;
+  }
+
+  .spreadsheetTrackerTable thead {
+    display: table-header-group;
+  }
+
+  .spreadsheetTrackerTable tbody,
+  .spreadsheetTrackerTable tr {
+    display: table-row-group;
+  }
+
+  .spreadsheetTrackerTable tr {
+    display: table-row;
+  }
+
+  .spreadsheetTrackerTable td,
+  .spreadsheetTrackerTable th {
+    display: table-cell;
+    width: auto !important;
+  }
+
+  .spreadsheetTrackerTable .clientColumn {
+    width: 180px !important;
+    min-width: 180px;
+  }
+
+  .spreadsheetTrackerTable .assigneeColumn {
+    left: 180px;
+    width: 130px !important;
+    min-width: 130px;
+  }
+
+  .spreadsheetTrackerTable .periodColumn,
+  .periodWorkCell {
+    width: 165px !important;
+    min-width: 165px;
   }
 
   .detailsButton,

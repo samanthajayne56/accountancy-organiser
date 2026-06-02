@@ -110,6 +110,22 @@ type Tracker = {
   detailFields: string[];
 };
 
+type PeriodColumn = {
+  key: string;
+  label: string;
+  start: string | null;
+  end: string | null;
+};
+
+type SpreadsheetTrackerGroup = {
+  key: string;
+  client: string;
+  assigneeId: string;
+  assignee: string;
+  rows: PlannerRow[];
+  rowsByPeriod: Map<string, PlannerRow>;
+};
+
 type DeadlineAlert = {
   id: string;
   kind: AlertKind;
@@ -1335,12 +1351,162 @@ function TrackerView({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, 
   onToggle: (id: string) => void; onUpdate: (id: string, patch: Partial<PlannerRow>) => void; onDetail: (id: string, field: string, value: string) => void; onDelete: (id: string) => void;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const spreadsheetLayout = recurringTrackerIds.has(tracker.id) && rows.some((row) => row.isRecurring);
+
+  if (spreadsheetLayout) {
+    return (
+      <RecurringTrackerTable
+        tracker={tracker}
+        rows={rows}
+        profiles={profiles}
+        isAdmin={isAdmin}
+        canEdit={canEdit}
+        expandedRows={expandedRows}
+        confirmId={confirmId}
+        onConfirm={setConfirmId}
+        onToggle={onToggle}
+        onUpdate={onUpdate}
+        onDetail={onDetail}
+        onDelete={onDelete}
+      />
+    );
+  }
+
   return <section className="trackerPanel"><div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}><div><h3>{tracker.name}</h3><p>{tracker.description}</p></div><span>{rows.length} rows</span></div><div className="simpleTableWrap"><table className="simpleTable"><thead><tr><th>Client</th><th>Assignee</th><th>Tracker</th><th>Status</th><th>Period</th><th>Deadline</th><th>Priority</th><th>Notes</th><th>Details</th><th>Actions</th></tr></thead><tbody>{rows.map((row) => {
     const editable = canEdit(row);
     const expanded = expandedRows.includes(row.id);
     const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === row.assigneeId);
     return <Fragment key={row.id}><tr><td data-label="Client">{row.client}</td><td data-label="Assignee"><select disabled={!isAdmin} value={row.assigneeId} onChange={(event) => onUpdate(row.id, { assigneeId: event.target.value })}>{assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}</select></td><td data-label="Tracker">{tracker.name}</td><td data-label="Status"><select disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>{statusOptions.map((status) => <option key={status}>{status}</option>)}</select></td><td data-label="Period"><span className={row.isRecurring ? "periodPill recurring" : "periodPill"}>{row.periodLabel || "Once"}</span></td><td data-label="Deadline"><input disabled={!editable} type="date" value={row.deadlineDate ?? ""} onChange={(event) => onUpdate(row.id, { deadlineDate: event.target.value || null })} /></td><td data-label="Priority"><select disabled={!editable} value={row.priority} onChange={(event) => onUpdate(row.id, { priority: event.target.value as Priority })}>{priorityOptions.map((priority) => <option key={priority}>{priority}</option>)}</select></td><td data-label="Notes"><textarea disabled={!editable} value={row.notes} onChange={(event) => onUpdate(row.id, { notes: event.target.value })} /></td><td data-label="Details"><button className="detailsButton" onClick={() => onToggle(row.id)}>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}Details</button></td><td data-label="Actions">{editable ? <button className="trackerDeleteButton" onClick={() => { if (confirmId === row.id) onDelete(row.id); else setConfirmId(row.id); }}><Trash2 size={15} />{confirmId === row.id ? "Confirm" : "Delete"}</button> : <span className="readOnlyTag">View only</span>}</td></tr>{expanded ? <tr className="detailsRow"><td colSpan={10}><div className="detailsGrid">{tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!editable} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}</div></td></tr> : null}</Fragment>;
   })}</tbody></table></div></section>;
+}
+
+function RecurringTrackerTable({ tracker, rows, profiles, isAdmin, canEdit, expandedRows, confirmId, onConfirm, onToggle, onUpdate, onDetail, onDelete }: {
+  tracker: Tracker;
+  rows: PlannerRow[];
+  profiles: Profile[];
+  isAdmin: boolean;
+  canEdit: (row: PlannerRow) => boolean;
+  expandedRows: string[];
+  confirmId: string | null;
+  onConfirm: (id: string | null) => void;
+  onToggle: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<PlannerRow>) => void;
+  onDetail: (id: string, field: string, value: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const fixedFields = fixedDetailFieldsForTracker(tracker);
+  const periodColumns = getPeriodColumns(rows);
+  const groups = groupRowsForSpreadsheet(rows, periodColumns);
+  const colSpan = 2 + fixedFields.length + periodColumns.length;
+
+  return (
+    <section className="trackerPanel spreadsheetTrackerPanel">
+      <div className="trackerHeader" style={{ "--accent": tracker.accent } as React.CSSProperties}>
+        <div><h3>{tracker.name}</h3><p>{tracker.description}</p></div>
+        <span>{groups.length} client{groups.length === 1 ? "" : "s"} | {rows.length} period row{rows.length === 1 ? "" : "s"}</span>
+      </div>
+      <div className="statusLegend" aria-label="Tracker status legend">
+        {statusOptions.map((status, index) => <span key={status}><strong>{index + 1}</strong>{status}</span>)}
+      </div>
+      <div className="simpleTableWrap spreadsheetTableWrap">
+        <table className="spreadsheetTrackerTable">
+          <thead>
+            <tr>
+              <th className="stickyColumn clientColumn">Client</th>
+              <th className="stickyColumn assigneeColumn">Assignee</th>
+              {fixedFields.map((field) => <th key={field} className="fixedDetailColumn">{field}</th>)}
+              {periodColumns.map((period) => <th key={period.key} className="periodColumn">{period.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => {
+              const assignmentProfiles = profiles.filter((staff) => staff.isActive || staff.id === group.assigneeId);
+              const primaryRow = group.rows[0];
+              const expanded = group.rows.filter((row) => expandedRows.includes(row.id));
+              return (
+                <Fragment key={group.key}>
+                  <tr>
+                    <td className="stickyColumn clientColumn"><strong>{group.client}</strong></td>
+                    <td className="stickyColumn assigneeColumn">
+                      <select disabled={!isAdmin || !primaryRow} value={group.assigneeId} onChange={(event) => group.rows.forEach((row) => onUpdate(row.id, { assigneeId: event.target.value }))}>
+                        {assignmentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}{profile.isActive ? "" : " (inactive)"}</option>)}
+                      </select>
+                    </td>
+                    {fixedFields.map((field) => (
+                      <td className="fixedDetailColumn" key={field}>
+                        <input
+                          disabled={!primaryRow || !canEdit(primaryRow)}
+                          value={primaryRow?.details[field] ?? ""}
+                          onChange={(event) => group.rows.filter((row) => canEdit(row)).forEach((row) => onDetail(row.id, field, event.target.value))}
+                        />
+                      </td>
+                    ))}
+                    {periodColumns.map((period) => {
+                      const row = group.rowsByPeriod.get(period.key);
+                      return <td className="periodWorkCell" key={period.key}>{row ? (
+                        <PeriodWorkCell
+                          row={row}
+                          editable={canEdit(row)}
+                          expanded={expandedRows.includes(row.id)}
+                          confirming={confirmId === row.id}
+                          onToggle={onToggle}
+                          onUpdate={onUpdate}
+                          onConfirm={onConfirm}
+                          onDelete={onDelete}
+                        />
+                      ) : <span className="emptyPeriodCell">-</span>}</td>;
+                    })}
+                  </tr>
+                  {expanded.length ? (
+                    <tr className="spreadsheetDetailsRow">
+                      <td colSpan={colSpan}>
+                        {expanded.map((row) => (
+                          <div className="spreadsheetDetailsPanel" key={row.id}>
+                            <strong>{row.periodLabel || "Once"}</strong>
+                            <div className="detailsGrid">
+                              {tracker.detailFields.map((field) => <label key={field}><span>{field}</span><input disabled={!canEdit(row)} value={row.details[field] ?? ""} onChange={(event) => onDetail(row.id, field, event.target.value)} /></label>)}
+                            </div>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function PeriodWorkCell({ row, editable, expanded, confirming, onToggle, onUpdate, onConfirm, onDelete }: {
+  row: PlannerRow;
+  editable: boolean;
+  expanded: boolean;
+  confirming: boolean;
+  onToggle: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<PlannerRow>) => void;
+  onConfirm: (id: string | null) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="periodWork">
+      <select disabled={!editable} value={row.status} onChange={(event) => onUpdate(row.id, { status: event.target.value as Status })}>
+        {statusOptions.map((status, index) => <option key={status} value={status}>{index + 1} - {status}</option>)}
+      </select>
+      <input disabled={!editable} type="date" value={row.deadlineDate ?? ""} onChange={(event) => onUpdate(row.id, { deadlineDate: event.target.value || null })} />
+      <select disabled={!editable} value={row.priority} onChange={(event) => onUpdate(row.id, { priority: event.target.value as Priority })}>
+        {priorityOptions.map((priority) => <option key={priority}>{priority}</option>)}
+      </select>
+      <textarea disabled={!editable} value={row.notes} placeholder={formatDateCompact(row.periodEnd)} onChange={(event) => onUpdate(row.id, { notes: event.target.value })} />
+      <div className="periodCellActions">
+        <button className="detailsButton" onClick={() => onToggle(row.id)}>{expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}Details</button>
+        {editable ? <button className="trackerDeleteButton" onClick={() => { if (confirming) onDelete(row.id); else onConfirm(row.id); }}><Trash2 size={14} />{confirming ? "Confirm" : "Delete"}</button> : <span className="readOnlyTag">View only</span>}
+      </div>
+    </div>
+  );
 }
 
 function MetricCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone: "blue" | "yellow" | "red" | "orange" }) {
@@ -1369,7 +1535,7 @@ function createStarterRow(client: SharedClient, assignee: Profile, tracker: Trac
     trackerId: tracker.id,
     status: "Ready",
     priority: "Normal",
-    deadlineDate: null,
+    deadlineDate: period ? defaultDeadlineForPeriod(tracker.id, period.end) : null,
     periodLabel: period?.label ?? "",
     periodStart: period?.start ?? null,
     periodEnd: period?.end ?? null,
@@ -1378,6 +1544,93 @@ function createStarterRow(client: SharedClient, assignee: Profile, tracker: Trac
     notes: "",
     details: Object.fromEntries(tracker.detailFields.map((field) => [field, ""]))
   };
+}
+
+function fixedDetailFieldsForTracker(tracker: Tracker) {
+  const fieldsByTracker: Record<string, string[]> = {
+    "vat-returns": ["VAT Qtr", "Year End", "VAT Scheme"],
+    "monthly-bk-vat": ["Quarterly", "Fee Type", "VAT Qtr", "Year End", "Scheme"],
+    "monthly-bk-non-vat": ["Quarterly", "Fee Type", "Monthly BK", "Year End"],
+    payroll: ["Software", "Pension", "Employees"],
+    cis: ["Refund Due"]
+  };
+  return fieldsByTracker[tracker.id] ?? tracker.detailFields.filter((field) => !monthShortNames().includes(field) && !/^Wk\d+$/i.test(field));
+}
+
+function getPeriodColumns(rows: PlannerRow[]): PeriodColumn[] {
+  const columns = new Map<string, PeriodColumn>();
+  rows.forEach((row) => {
+    const key = periodColumnKey(row);
+    if (!columns.has(key)) {
+      columns.set(key, { key, label: row.periodLabel || "Once", start: row.periodStart, end: row.periodEnd });
+    }
+  });
+  return Array.from(columns.values()).sort((left, right) => {
+    const leftDate = dateSortValue(left.start ?? left.end);
+    const rightDate = dateSortValue(right.start ?? right.end);
+    if (leftDate !== rightDate) return leftDate - rightDate;
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function groupRowsForSpreadsheet(rows: PlannerRow[], periodColumns: PeriodColumn[]): SpreadsheetTrackerGroup[] {
+  const periodOrder = new Map(periodColumns.map((period, index) => [period.key, index]));
+  const groups = new Map<string, SpreadsheetTrackerGroup>();
+
+  rows.forEach((row) => {
+    const key = row.clientId || row.client;
+    const existing = groups.get(key);
+    const group = existing ?? {
+      key,
+      client: row.client,
+      assigneeId: row.assigneeId,
+      assignee: row.assignee,
+      rows: [],
+      rowsByPeriod: new Map<string, PlannerRow>()
+    };
+    group.rows.push(row);
+    group.rowsByPeriod.set(periodColumnKey(row), row);
+    groups.set(key, group);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      rows: [...group.rows].sort((left, right) => (periodOrder.get(periodColumnKey(left)) ?? 0) - (periodOrder.get(periodColumnKey(right)) ?? 0))
+    }))
+    .sort((left, right) => left.client.localeCompare(right.client));
+}
+
+function periodColumnKey(row: PlannerRow) {
+  return `${row.periodStart ?? "none"}:${row.periodEnd ?? "none"}:${row.periodLabel || "Once"}`;
+}
+
+function defaultDeadlineForPeriod(trackerId: string, periodEnd: string) {
+  const [year, month, day] = periodEnd.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day);
+
+  if (trackerId === "vat-returns" || trackerId === "monthly-bk-vat" || trackerId === "mtd-itsa") {
+    return addMonthsAndDays(endDate, 1, 7);
+  }
+
+  if (trackerId === "cis") {
+    return toDateString(endDate.getMonth() === 11 ? endDate.getFullYear() + 1 : endDate.getFullYear(), (endDate.getMonth() + 1) % 12, 19);
+  }
+
+  if (trackerId === "monthly-bk-non-vat") {
+    return addMonthsAndDays(endDate, 1, 0);
+  }
+
+  if (trackerId === "payroll") {
+    return periodEnd;
+  }
+
+  return periodEnd;
+}
+
+function addMonthsAndDays(date: Date, months: number, days: number) {
+  const next = new Date(date.getFullYear(), date.getMonth() + months, date.getDate() + days);
+  return toDateString(next.getFullYear(), next.getMonth(), next.getDate());
 }
 
 function createPeriodsForTracker(trackerId: string, recurrence: ServiceRecurrence) {
@@ -1426,7 +1679,11 @@ function monthLabel(year: number, month: number) {
 }
 
 function monthShort(month: number) {
-  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month];
+  return monthShortNames()[month];
+}
+
+function monthShortNames() {
+  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 }
 
 function taxMonthNumber(month: number) {
@@ -1532,6 +1789,12 @@ function formatMoney(amount: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(amount);
 }
 
+function formatDateCompact(value: string | null) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  return `${day} ${monthShort(month - 1)} ${year}`;
+}
+
 function recordToProfile(record: ProfileRecord): Profile {
   return { id: record.id, email: record.email, displayName: record.display_name, jobTitle: record.job_title, isAdmin: record.is_admin, isActive: record.is_active };
 }
@@ -1557,7 +1820,8 @@ function recordToClient(record: ClientRecord, services: ClientServiceRecord[], c
 }
 
 function recordToRow(record: PlannerRowRecord, profiles: Profile[], clients: SharedClient[]): PlannerRow {
-  return { id: record.id, clientId: record.client_id, client: clients.find((client) => client.id === record.client_id)?.name ?? record.client, assigneeId: record.assignee_id, assignee: profiles.find((profile) => profile.id === record.assignee_id)?.displayName ?? record.assignee, team: record.team, trackerId: record.tracker_id, status: record.status, priority: record.priority, deadlineDate: record.deadline_date, periodLabel: record.period_label ?? "", periodStart: record.period_start ?? null, periodEnd: record.period_end ?? null, isRecurring: Boolean(record.is_recurring), recurrenceKey: record.recurrence_key ?? null, notes: record.notes ?? "", details: record.details ?? {} };
+  const periodEnd = record.period_end ?? null;
+  return { id: record.id, clientId: record.client_id, client: clients.find((client) => client.id === record.client_id)?.name ?? record.client, assigneeId: record.assignee_id, assignee: profiles.find((profile) => profile.id === record.assignee_id)?.displayName ?? record.assignee, team: record.team, trackerId: record.tracker_id, status: record.status, priority: record.priority, deadlineDate: record.deadline_date ?? (record.is_recurring && periodEnd ? defaultDeadlineForPeriod(record.tracker_id, periodEnd) : null), periodLabel: record.period_label ?? "", periodStart: record.period_start ?? null, periodEnd, isRecurring: Boolean(record.is_recurring), recurrenceKey: record.recurrence_key ?? null, notes: record.notes ?? "", details: record.details ?? {} };
 }
 
 function rowToRecord(row: PlannerRow, createdBy: string) {
