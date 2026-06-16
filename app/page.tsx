@@ -76,6 +76,7 @@ type SharedClient = {
   rejectionReason: string;
   serviceIds: string[];
   serviceRecurrences: Record<string, ServiceRecurrence>;
+  serviceAssigneeIds: Record<string, string | null>;
   contacts: ClientContact[];
   fees: ClientFee[];
   isDraft?: boolean;
@@ -177,6 +178,7 @@ type ClientRecord = {
 type ClientServiceRecord = {
   client_id: string;
   tracker_id: string;
+  assignee_id?: string | null;
   is_monthly?: boolean | null;
   quarter_cycle?: QuarterCycle | PayrollFrequency | null;
 };
@@ -295,6 +297,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [recurringSchemaReady, setRecurringSchemaReady] = useState(true);
+  const [serviceAssignmentSchemaReady, setServiceAssignmentSchemaReady] = useState(true);
 
   const isAdmin = Boolean(profile?.isAdmin);
   const activeProfiles = profiles.filter((staff) => staff.isActive);
@@ -337,14 +340,21 @@ export default function Home() {
     }
 
     let nextRecurringSchemaReady = true;
+    let nextServiceAssignmentSchemaReady = true;
     let [profileResult, clientsResult, servicesResult, contactsResult, feesResult, rowsResult]: any[] = await Promise.all([
       supabase.from("profiles").select("id, email, display_name, job_title, is_admin, is_active").order("display_name"),
       supabase.from("clients").select("id, name, type, main_contact_id, notes, status, requested_by, reviewed_by, reviewed_at, rejection_reason").order("name"),
-      supabase.from("client_services").select("client_id, tracker_id, is_monthly, quarter_cycle"),
+      supabase.from("client_services").select("client_id, tracker_id, assignee_id, is_monthly, quarter_cycle"),
       supabase.from("client_contacts").select("id, client_id, full_name, role, email").order("full_name"),
       supabase.from("client_fees").select("id, client_id, description, billing_frequency, amount, notes").order("description"),
       supabase.from("planner_rows").select("id, client_id, client, assignee_id, assignee, team, tracker_id, status, priority, deadline_date, period_label, period_start, period_end, is_recurring, recurrence_key, notes, details").order("period_start", { ascending: true, nullsFirst: false }).order("deadline_date", { ascending: true, nullsFirst: false })
     ]);
+
+    const serviceAssignmentSchemaMissing = servicesResult.error?.message.includes("assignee_id");
+    if (serviceAssignmentSchemaMissing) {
+      nextServiceAssignmentSchemaReady = false;
+      servicesResult = await supabase.from("client_services").select("client_id, tracker_id, is_monthly, quarter_cycle");
+    }
 
     const recurringSchemaMissing = [servicesResult.error, rowsResult.error].some((error) => error?.message.includes("does not exist"));
     if (recurringSchemaMissing) {
@@ -382,6 +392,7 @@ export default function Home() {
     const loadedClients = ((clientsResult.data ?? []) as ClientRecord[]).map((client) => recordToClient(client, loadedServices, loadedContacts, loadedFees));
     const loadedRows = ((rowsResult.data ?? []) as PlannerRowRecord[]).map((row) => recordToRow(row, loadedProfiles, loadedClients)).filter(isAllowedTrackerPeriod);
     setRecurringSchemaReady(nextRecurringSchemaReady);
+    setServiceAssignmentSchemaReady(nextServiceAssignmentSchemaReady);
     setProfile(loadedProfiles.find((staff) => staff.id === user.id) ?? currentProfile);
     setProfiles(loadedProfiles);
     setClients(loadedClients);
@@ -392,7 +403,13 @@ export default function Home() {
       const selected = loadedClients.find((client) => client.id === (draft?.id || selectedClientId));
       return selected ? { ...selected } : loadedClients[0] ? { ...loadedClients[0] } : null;
     });
-    setErrorMessage(nextRecurringSchemaReady ? "" : "Recurring tracker setup is not active yet. Run supabase/recurring_tracker_periods_upgrade.sql in Supabase, then refresh.");
+    setErrorMessage(
+      !nextRecurringSchemaReady
+        ? "Recurring tracker setup is not active yet. Run supabase/recurring_tracker_periods_upgrade.sql in Supabase, then refresh."
+        : !nextServiceAssignmentSchemaReady
+          ? "Service assignment setup is not active yet. Run supabase/service_assignments_upgrade.sql in Supabase, then refresh."
+          : ""
+    );
   }, [selectedClientId, supabase]);
 
   useEffect(() => {
@@ -489,6 +506,7 @@ export default function Home() {
       rejectionReason: "",
       serviceIds: [],
       serviceRecurrences: {},
+      serviceAssigneeIds: {},
       contacts: [],
       fees: [],
       isDraft: true
@@ -550,14 +568,17 @@ export default function Home() {
         .upsert(
           draftServices.map((serviceId) => {
             const recurrence = normalizeRecurrence(serviceId, draftClient.serviceRecurrences[serviceId]);
+            const serviceAssigneeId = resolveServiceAssigneeId(draftClient, serviceId, activeProfiles, profile);
             return recurringSchemaReady ? {
               client_id: draftClient.id,
               tracker_id: serviceId,
+              ...(serviceAssignmentSchemaReady ? { assignee_id: serviceAssigneeId } : {}),
               is_monthly: recurrence.isMonthly,
               quarter_cycle: serviceId === "payroll" ? recurrence.payrollFrequency : recurrence.quarterCycle
             } : {
               client_id: draftClient.id,
-              tracker_id: serviceId
+              tracker_id: serviceId,
+              ...(serviceAssignmentSchemaReady ? { assignee_id: serviceAssigneeId } : {})
             };
           }),
           { onConflict: "client_id,tracker_id" }
@@ -567,6 +588,13 @@ export default function Home() {
         await loadSharedData();
         return;
       }
+    }
+
+    const serviceAssignmentError = await syncOpenServiceAssignments(draftClient, draftServices);
+    if (serviceAssignmentError) {
+      setErrorMessage(`Client saved, but open tracker assignments could not be updated: ${serviceAssignmentError}`);
+      await loadSharedData();
+      return;
     }
 
     const contactIdsToKeep = new Set(contactsToSave.map((contact) => contact.id));
@@ -730,6 +758,23 @@ export default function Home() {
     await loadSharedData();
   }
 
+  async function syncOpenServiceAssignments(client: SharedClient, serviceIds: string[]) {
+    if (!profile || !isAdmin || !serviceIds.length) return null;
+
+    for (const serviceId of serviceIds) {
+      const assignee = getServiceAssigneeProfile(client, serviceId, activeProfiles, profile);
+      const { error } = await supabase
+        .from("planner_rows")
+        .update({ assignee_id: assignee.id, assignee: assignee.displayName })
+        .eq("client_id", client.id)
+        .eq("tracker_id", serviceId)
+        .not("status", "in", "(Filed,Complete)");
+      if (error) return error.message;
+    }
+
+    return null;
+  }
+
   async function createMissingTrackerRows(client: SharedClient, serviceIds: string[]) {
     if (!profile || client.status !== "approved") return null;
     const selectedTrackers = serviceTrackers.filter((tracker) => serviceIds.includes(tracker.id));
@@ -744,10 +789,9 @@ export default function Home() {
       if (error) return error.message;
 
       const existingTrackerIds = new Set((data ?? []).map((row) => row.tracker_id));
-      const assignee = activeProfiles.find((staff) => staff.id === client.mainContactId) ?? profile;
       const starterRows = selectedTrackers
         .filter((tracker) => !existingTrackerIds.has(tracker.id))
-        .map((tracker) => createStarterRow(client, assignee, tracker));
+        .map((tracker) => createStarterRow(client, getServiceAssigneeProfile(client, tracker.id, activeProfiles, profile), tracker));
       if (!starterRows.length) return null;
 
       const { error: insertError } = await supabase
@@ -765,8 +809,8 @@ export default function Home() {
 
     const existingTrackerIds = new Set((data ?? []).map((row) => row.tracker_id));
     const existingRecurrenceKeys = new Set((data ?? []).map((row) => row.recurrence_key).filter(Boolean));
-    const assignee = activeProfiles.find((staff) => staff.id === client.mainContactId) ?? profile;
     const starterRows = selectedTrackers.flatMap((tracker) => {
+      const assignee = getServiceAssigneeProfile(client, tracker.id, activeProfiles, profile);
       const recurrence = normalizeRecurrence(tracker.id, client.serviceRecurrences[tracker.id]);
       const periods = createPeriodsForTracker(tracker.id, recurrence);
 
@@ -974,6 +1018,7 @@ export default function Home() {
             currentProfile={profile}
             isAdmin={isAdmin}
             recurringSchemaReady={recurringSchemaReady}
+            serviceAssignmentSchemaReady={serviceAssignmentSchemaReady}
             savedId={savedClientId}
             onSearch={setClientSearch}
             onSelect={selectClient}
@@ -1110,8 +1155,8 @@ function TaskCard({ row, editable, tone, onOpen, onHide, onUpdate }: { row: Plan
   </article>;
 }
 
-function ClientsView({ clients, profiles, draft, selectedId, search, currentProfile, isAdmin, recurringSchemaReady, savedId, onSearch, onSelect, onAdd, onChange, onSave, onReview, onDelete }: {
-  clients: SharedClient[]; profiles: Profile[]; draft: SharedClient | null; selectedId: string; search: string; currentProfile: Profile | null; isAdmin: boolean; recurringSchemaReady: boolean; savedId: string | null;
+function ClientsView({ clients, profiles, draft, selectedId, search, currentProfile, isAdmin, recurringSchemaReady, serviceAssignmentSchemaReady, savedId, onSearch, onSelect, onAdd, onChange, onSave, onReview, onDelete }: {
+  clients: SharedClient[]; profiles: Profile[]; draft: SharedClient | null; selectedId: string; search: string; currentProfile: Profile | null; isAdmin: boolean; recurringSchemaReady: boolean; serviceAssignmentSchemaReady: boolean; savedId: string | null;
   onSearch: (value: string) => void; onSelect: (id: string) => void; onAdd: () => void; onChange: (value: SharedClient) => void; onSave: () => void; onReview: (id: string, status: "approved" | "rejected", reason: string) => void; onDelete: (id: string) => void;
 }) {
   const [reason, setReason] = useState("");
@@ -1126,6 +1171,8 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
     });
   const editable = Boolean(draft && (isAdmin || (draft.status === "pending" && draft.requestedBy === currentProfile?.id)));
   const draftServices = draft?.serviceIds ?? [];
+  const activeProfiles = profiles.filter((profile) => profile.isActive);
+  const assigneeProfiles = activeProfiles.length ? activeProfiles : profiles;
   return <section className="clientsGrid">
     <div className="clientsPanel">
       <div className="sectionTitle"><div><p className="eyebrow">{isAdmin ? "Approvals and clients" : "Shared clients"}</p><h3>All Clients</h3></div><button className="compactButton" onClick={onAdd}><CirclePlus size={16} />{isAdmin ? "Add" : "Request"}</button></div>
@@ -1183,10 +1230,12 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
           </div>
           <p className="servicesHelp">Tick a service, then save. Once the client is approved, a starting row is automatically added to each matching tracker.</p>
           {!recurringSchemaReady ? <p className="servicesHelp upgradeHelp">Recurring period controls will appear after the recurring tracker upgrade SQL has been run.</p> : null}
+          {!serviceAssignmentSchemaReady ? <p className="servicesHelp upgradeHelp">Service assignment controls will save after the service assignments upgrade SQL has been run.</p> : null}
           <div className="serviceGrid">
             {serviceTrackers.map((service) => {
               const selected = draftServices.includes(service.id);
               const recurrence = normalizeRecurrence(service.id, draft.serviceRecurrences[service.id]);
+              const serviceAssigneeId = resolveServiceAssigneeId(draft, service.id, assigneeProfiles, currentProfile);
               return (
                 <article key={service.id} className={selected ? "serviceCard active" : "serviceCard"} style={{ "--accent": service.accent } as React.CSSProperties}>
                   <label className="serviceToggle">
@@ -1198,12 +1247,33 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
                         ...draft,
                         serviceIds: event.target.checked
                           ? [...draftServices, service.id]
-                          : draftServices.filter((serviceId) => serviceId !== service.id)
+                          : draftServices.filter((serviceId) => serviceId !== service.id),
+                        serviceAssigneeIds: event.target.checked
+                          ? { ...draft.serviceAssigneeIds, [service.id]: serviceAssigneeId }
+                          : Object.fromEntries(Object.entries(draft.serviceAssigneeIds).filter(([serviceId]) => serviceId !== service.id))
                       })}
                     />
                     <span>{service.name}</span>
                   </label>
                   <p>{trackerGroups[service.group]}</p>
+                  {selected ? (
+                    <label className="serviceAssignee">
+                      <span>Assign work to</span>
+                      <select
+                        disabled={!editable || !serviceAssignmentSchemaReady}
+                        value={serviceAssigneeId}
+                        onChange={(event) => onChange({
+                          ...draft,
+                          serviceAssigneeIds: {
+                            ...draft.serviceAssigneeIds,
+                            [service.id]: event.target.value
+                          }
+                        })}
+                      >
+                        {assigneeProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
                   {recurringSchemaReady && selected && recurringTrackerIds.has(service.id) ? (
                     <div className="recurrenceControls">
                       {service.id === "payroll" ? (
@@ -2168,6 +2238,16 @@ function recordToProfile(record: ProfileRecord): Profile {
   return { id: record.id, email: record.email, displayName: record.display_name, jobTitle: record.job_title, isAdmin: record.is_admin, isActive: record.is_active };
 }
 
+function resolveServiceAssigneeId(client: SharedClient, serviceId: string, profiles: Profile[], fallbackProfile: Profile | null) {
+  const candidateId = client.serviceAssigneeIds[serviceId] ?? client.mainContactId ?? fallbackProfile?.id ?? profiles[0]?.id ?? "";
+  return profiles.some((profile) => profile.id === candidateId) ? candidateId : fallbackProfile?.id ?? profiles[0]?.id ?? "";
+}
+
+function getServiceAssigneeProfile(client: SharedClient, serviceId: string, profiles: Profile[], fallbackProfile: Profile) {
+  const assigneeId = resolveServiceAssigneeId(client, serviceId, profiles, fallbackProfile);
+  return profiles.find((profile) => profile.id === assigneeId) ?? fallbackProfile;
+}
+
 function recordToClient(record: ClientRecord, services: ClientServiceRecord[], contacts: ClientContactRecord[], fees: ClientFeeRecord[]): SharedClient {
   const clientServices = services.filter((service) => service.client_id === record.id);
   return {
@@ -2183,6 +2263,7 @@ function recordToClient(record: ClientRecord, services: ClientServiceRecord[], c
     rejectionReason: record.rejection_reason ?? "",
     serviceIds: clientServices.map((service) => service.tracker_id),
     serviceRecurrences: Object.fromEntries(clientServices.map((service) => [service.tracker_id, normalizeRecurrence(service.tracker_id, { isMonthly: Boolean(service.is_monthly), quarterCycle: isQuarterCycle(service.quarter_cycle) ? service.quarter_cycle : null, payrollFrequency: isPayrollFrequency(service.quarter_cycle) ? service.quarter_cycle : null })])),
+    serviceAssigneeIds: Object.fromEntries(clientServices.map((service) => [service.tracker_id, service.assignee_id ?? record.main_contact_id])),
     contacts: contacts.filter((contact) => contact.client_id === record.id).map((contact) => ({ id: contact.id, fullName: contact.full_name, role: contact.role ?? "", email: contact.email ?? "" })),
     fees: fees.filter((fee) => fee.client_id === record.id).map((fee) => ({ id: fee.id, description: fee.description, billingFrequency: fee.billing_frequency, amount: String(fee.amount), notes: fee.notes ?? "" }))
   };
