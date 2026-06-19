@@ -55,14 +55,6 @@ type ClientContact = {
   email: string;
 };
 
-type ClientFee = {
-  id: string;
-  description: string;
-  billingFrequency: string;
-  amount: string;
-  notes: string;
-};
-
 type SharedClient = {
   id: string;
   name: string;
@@ -78,7 +70,6 @@ type SharedClient = {
   serviceRecurrences: Record<string, ServiceRecurrence>;
   serviceAssigneeIds: Record<string, string | null>;
   contacts: ClientContact[];
-  fees: ClientFee[];
   isDraft?: boolean;
 };
 
@@ -191,15 +182,6 @@ type ClientContactRecord = {
   email: string | null;
 };
 
-type ClientFeeRecord = {
-  id: string;
-  client_id: string;
-  description: string;
-  billing_frequency: string;
-  amount: number | string;
-  notes: string | null;
-};
-
 type PlannerRowRecord = {
   id: string;
   client_id: string;
@@ -226,7 +208,6 @@ const ALERT_WINDOW_DAYS = 14;
 const statusOptions: Status[] = ["Ready", "In progress", "Queries", "Review", "Urgent", "Filed", "Complete"];
 const priorityOptions: Priority[] = ["Normal", "Action", "Urgent", "Complete"];
 const clientTypes = ["Limited Company", "Sole Trader", "Self Assessment", "Partnership", "LLP", "Other"];
-const billingFrequencies = ["Monthly", "Quarterly", "Annually", "Hourly", "One-off"];
 const defaultTrackerFilters: TrackerFilters = { assigneeId: "all", status: "all", priority: "all", completion: "all", period: "all" };
 
 const trackerGroups: Record<TrackerGroupId, string> = {
@@ -238,25 +219,24 @@ const trackerGroups: Record<TrackerGroupId, string> = {
 };
 
 const trackers: Tracker[] = [
-  tracker("mtd-itsa", "MTD ITSA", "MTD ITSA Enrolment 50k Plus", "tax", "Tax", "#92d050", "MTD enrolment, software checks and fee increase actions.", ["Check TR", "Advise", "HMRC", "Xero Link", "Software", "BK Client"]),
+  tracker("mtd-itsa", "MTD ITSA", "MTD ITSA Enrolment 50k Plus", "tax", "Tax", "#92d050", "MTD enrolment and software checks.", ["Check TR", "Advise", "HMRC", "Xero Link", "Software", "BK Client"]),
   tracker("personal-tax", "Personal Tax", "Personal Tax Returns", "tax", "Tax", "#92d050", "Self assessment checklist, review and filing workflow.", ["Books", "Queries", "Review", "Sent", "Filed", "Turnover Check", "P11D"]),
   tracker("company-accounts", "Accounts & CT600", "Limited Company Accounts / CT600", "companies", "Accounts", "#ffc000", "Company accounts and corporation tax return progress.", ["Year End", "First Chase", "Info In", "Review", "Filed", "P11D Y/N"]),
   tracker("vat-returns", "VAT Registered", "VAT Returns", "bookkeeping", "Bookkeeping", "#5b9bd5", "VAT returns, schemes and monthly work.", ["VAT Qtr", "Year End", "VAT Scheme", "Jan", "Feb", "Mar", "Apr", "May", "Jun"]),
-  tracker("monthly-bk-vat", "Monthly BK VAT", "Monthly Bookkeeping VAT Clients", "bookkeeping", "Bookkeeping", "#00b0f0", "Monthly bookkeeping clients who are VAT registered.", ["Quarterly", "Fee Type", "VAT Qtr", "Year End", "Scheme"]),
-  tracker("monthly-bk-non-vat", "Monthly BK Non VAT", "Bookkeeping Non VAT Reg", "bookkeeping", "Bookkeeping", "#4472c4", "Monthly bookkeeping clients who are not VAT registered.", ["Quarterly", "Fee Type", "Monthly BK", "Year End"]),
+  tracker("monthly-bk-vat", "Monthly BK VAT", "Monthly Bookkeeping VAT Clients", "bookkeeping", "Bookkeeping", "#00b0f0", "Monthly bookkeeping clients who are VAT registered.", ["Quarterly", "VAT Qtr", "Year End", "Scheme"]),
+  tracker("monthly-bk-non-vat", "Monthly BK Non VAT", "Bookkeeping Non VAT Reg", "bookkeeping", "Bookkeeping", "#4472c4", "Monthly bookkeeping clients who are not VAT registered.", ["Quarterly", "Monthly BK", "Year End"]),
   tracker("payroll", "Payroll", "Payroll", "payroll", "Payroll", "#7030a0", "Weekly, fortnightly and monthly payroll tracking.", ["Software", "Wk1", "Wk2", "Wk3", "Wk4", "Monthly", "Pension", "Employees"]),
   tracker("cis", "CIS", "CIS", "compliance", "Compliance", "#7030a0", "CIS monthly income, subcontractor and submission progress.", ["Refund Due", "M1 Income", "M1 Subs", "M2 Income", "M2 Subs"]),
   tracker("cis-refunds", "CIS Refunds", "CIS Refunds", "compliance", "Compliance", "#ffc000", "RTI submission, refund application and receipt.", ["RTI Reported", "Refund Applied", "Refund Received", "Amount", "Tax Year"]),
-  tracker("confirmation-statements", "Confirmations", "Confirmation Statements", "companies", "Accounts", "#00b0f0", "Companies House confirmation statement deadlines.", ["Fee Included", "Due Date", "Deadline", "2026", "Invoiced", "Emailed"]),
+  tracker("confirmation-statements", "Confirmations", "Confirmation Statements", "companies", "Accounts", "#00b0f0", "Companies House confirmation statement deadlines.", ["Due Date", "Deadline", "2026", "Invoiced", "Emailed"]),
   tracker("p11ds", "P11Ds", "P11DS", "tax", "Payroll", "#92d050", "P11D tracker with review and filing stages.", ["Employees", "Y/E", "Accounts Due", "P11D Y/N"]),
   tracker("onboarding", "Onboarding", "Onboarding", "compliance", "Compliance", "#00b0f0", "New client setup, proposal, ID and HMRC checklist.", ["Proposal", "LOE", "ID", "Risk", "HMRC", "Companies House", "Xero"]),
   tracker("incorporations", "Incorporations", "Incorporations", "companies", "Accounts", "#ffc000", "New limited company checklist.", ["Incorp Date", "Form", "Apply Ltd", "Folder", "Bank", "PAYE"]),
-  tracker("id-checks", "ID Checks", "CH ID Limited Companies / ID Self Assessment", "compliance", "Compliance", "#ff0000", "Companies House and self assessment ID checks.", ["Client Type", "ID Type", "ID Expiry", "Utility Bill", "Verify ID"]),
-  tracker("fixed-fees", "Fees Tracker", "Client Fee Arrangements", "companies", "Accounts", "#00b0f0", "Shared billing arrangements for approved clients.", [])
+  tracker("id-checks", "ID Checks", "CH ID Limited Companies / ID Self Assessment", "compliance", "Compliance", "#ff0000", "Companies House and self assessment ID checks.", ["Client Type", "ID Type", "ID Expiry", "Utility Bill", "Verify ID"])
 ];
 
 const trackerById = Object.fromEntries(trackers.map((item) => [item.id, item]));
-const serviceTrackers = trackers.filter((item) => item.id !== "fixed-fees");
+const serviceTrackers = trackers;
 const completeStatuses = new Set<Status>(["Filed", "Complete"]);
 const recurringRolloverStatuses = new Set<Status>(["Review", "Filed", "Complete"]);
 const recurringTrackerIds = new Set(["mtd-itsa", "vat-returns", "monthly-bk-vat", "monthly-bk-non-vat", "payroll", "cis"]);
@@ -341,12 +321,11 @@ export default function Home() {
 
     let nextRecurringSchemaReady = true;
     let nextServiceAssignmentSchemaReady = true;
-    let [profileResult, clientsResult, servicesResult, contactsResult, feesResult, rowsResult]: any[] = await Promise.all([
+    let [profileResult, clientsResult, servicesResult, contactsResult, rowsResult]: any[] = await Promise.all([
       supabase.from("profiles").select("id, email, display_name, job_title, is_admin, is_active").order("display_name"),
       supabase.from("clients").select("id, name, type, main_contact_id, notes, status, requested_by, reviewed_by, reviewed_at, rejection_reason").order("name"),
       supabase.from("client_services").select("client_id, tracker_id, assignee_id, is_monthly, quarter_cycle"),
       supabase.from("client_contacts").select("id, client_id, full_name, role, email").order("full_name"),
-      supabase.from("client_fees").select("id, client_id, description, billing_frequency, amount, notes").order("description"),
       supabase.from("planner_rows").select("id, client_id, client, assignee_id, assignee, team, tracker_id, status, priority, deadline_date, period_label, period_start, period_end, is_recurring, recurrence_key, notes, details").order("period_start", { ascending: true, nullsFirst: false }).order("deadline_date", { ascending: true, nullsFirst: false })
     ]);
 
@@ -359,12 +338,11 @@ export default function Home() {
     const recurringSchemaMissing = [servicesResult.error, rowsResult.error].some((error) => error?.message.includes("does not exist"));
     if (recurringSchemaMissing) {
       nextRecurringSchemaReady = false;
-      [profileResult, clientsResult, servicesResult, contactsResult, feesResult, rowsResult] = await Promise.all([
+      [profileResult, clientsResult, servicesResult, contactsResult, rowsResult] = await Promise.all([
         supabase.from("profiles").select("id, email, display_name, job_title, is_admin, is_active").order("display_name"),
         supabase.from("clients").select("id, name, type, main_contact_id, notes, status, requested_by, reviewed_by, reviewed_at, rejection_reason").order("name"),
         supabase.from("client_services").select("client_id, tracker_id"),
         supabase.from("client_contacts").select("id, client_id, full_name, role, email").order("full_name"),
-        supabase.from("client_fees").select("id, client_id, description, billing_frequency, amount, notes").order("description"),
         supabase.from("planner_rows").select("id, client_id, client, assignee_id, assignee, team, tracker_id, status, priority, deadline_date, notes, details").order("deadline_date", { ascending: true, nullsFirst: false })
       ]);
     }
@@ -374,8 +352,8 @@ export default function Home() {
       return;
     }
 
-    if (contactsResult.error || feesResult.error) {
-      setErrorMessage(`Could not load client contact and fee details: ${(contactsResult.error ?? feesResult.error)?.message}. Run the client contacts and fees upgrade SQL first.`);
+    if (contactsResult.error) {
+      setErrorMessage(`Could not load client contact details: ${contactsResult.error.message}. Run the client contacts upgrade SQL first.`);
       return;
     }
 
@@ -388,8 +366,7 @@ export default function Home() {
     const loadedProfiles = ((profileResult.data ?? []) as ProfileRecord[]).map(recordToProfile);
     const loadedServices = (servicesResult.data ?? []) as ClientServiceRecord[];
     const loadedContacts = (contactsResult.data ?? []) as ClientContactRecord[];
-    const loadedFees = (feesResult.data ?? []) as ClientFeeRecord[];
-    const loadedClients = ((clientsResult.data ?? []) as ClientRecord[]).map((client) => recordToClient(client, loadedServices, loadedContacts, loadedFees));
+    const loadedClients = ((clientsResult.data ?? []) as ClientRecord[]).map((client) => recordToClient(client, loadedServices, loadedContacts));
     const loadedRows = ((rowsResult.data ?? []) as PlannerRowRecord[]).map((row) => recordToRow(row, loadedProfiles, loadedClients)).filter(isAllowedTrackerPeriod);
     setRecurringSchemaReady(nextRecurringSchemaReady);
     setServiceAssignmentSchemaReady(nextServiceAssignmentSchemaReady);
@@ -440,7 +417,6 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => void loadSharedData())
       .on("postgres_changes", { event: "*", schema: "public", table: "client_services" }, () => void loadSharedData())
       .on("postgres_changes", { event: "*", schema: "public", table: "client_contacts" }, () => void loadSharedData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "client_fees" }, () => void loadSharedData())
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => void loadSharedData())
       .subscribe();
 
@@ -508,7 +484,6 @@ export default function Home() {
       serviceRecurrences: {},
       serviceAssigneeIds: {},
       contacts: [],
-      fees: [],
       isDraft: true
     });
   }
@@ -516,15 +491,9 @@ export default function Home() {
   async function saveClient() {
     if (!draftClient || !profile || !draftClient.name.trim()) return;
     const contactsToSave = (draftClient.contacts ?? []).filter((contact) => contact.fullName.trim() || contact.role.trim() || contact.email.trim());
-    const feesToSave = (draftClient.fees ?? []).filter((fee) => fee.description.trim() || fee.amount.trim() || fee.notes.trim());
 
     if (contactsToSave.some((contact) => !contact.fullName.trim())) {
       setErrorMessage("Please enter a name for each client contact before saving.");
-      return;
-    }
-
-    if (feesToSave.some((fee) => !fee.description.trim() || fee.amount.trim() === "" || !Number.isFinite(Number(fee.amount)) || Number(fee.amount) < 0)) {
-      setErrorMessage("Please give each fee a description and a valid non-negative amount before saving.");
       return;
     }
 
@@ -598,23 +567,12 @@ export default function Home() {
     }
 
     const contactIdsToKeep = new Set(contactsToSave.map((contact) => contact.id));
-    const feeIdsToKeep = new Set(feesToSave.map((fee) => fee.id));
     const contactsToDelete = (savedClient?.contacts ?? []).filter((contact) => !contactIdsToKeep.has(contact.id));
-    const feesToDelete = (savedClient?.fees ?? []).filter((fee) => !feeIdsToKeep.has(fee.id));
 
     for (const contact of contactsToDelete) {
       const { error } = await supabase.from("client_contacts").delete().eq("id", contact.id);
       if (error) {
-        setErrorMessage(`Client saved, but contact details could not be updated: ${error.message}. Run the client contacts and fees upgrade SQL first.`);
-        await loadSharedData();
-        return;
-      }
-    }
-
-    for (const fee of feesToDelete) {
-      const { error } = await supabase.from("client_fees").delete().eq("id", fee.id);
-      if (error) {
-        setErrorMessage(`Client saved, but fee details could not be updated: ${error.message}. Run the client contacts and fees upgrade SQL first.`);
+        setErrorMessage(`Client saved, but contact details could not be updated: ${error.message}. Run the client contacts upgrade SQL first.`);
         await loadSharedData();
         return;
       }
@@ -632,26 +590,7 @@ export default function Home() {
         { onConflict: "id" }
       );
       if (error) {
-        setErrorMessage(`Client saved, but contact details could not be saved: ${error.message}. Run the client contacts and fees upgrade SQL first.`);
-        await loadSharedData();
-        return;
-      }
-    }
-
-    if (feesToSave.length) {
-      const { error } = await supabase.from("client_fees").upsert(
-        feesToSave.map((fee) => ({
-          id: fee.id,
-          client_id: draftClient.id,
-          description: fee.description.trim(),
-          billing_frequency: fee.billingFrequency,
-          amount: Number(fee.amount),
-          notes: fee.notes.trim()
-        })),
-        { onConflict: "id" }
-      );
-      if (error) {
-        setErrorMessage(`Client saved, but fee details could not be saved: ${error.message}. Run the client contacts and fees upgrade SQL first.`);
+        setErrorMessage(`Client saved, but contact details could not be saved: ${error.message}. Run the client contacts upgrade SQL first.`);
         await loadSharedData();
         return;
       }
@@ -999,7 +938,7 @@ export default function Home() {
             {activeTracker ? (
               <>
                 <label className="searchBox"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tracker" /></label>
-                {activeTracker.id !== "fixed-fees" ? <button className="primaryButton" onClick={beginNewTask}><CirclePlus size={18} />Add row</button> : null}
+                <button className="primaryButton" onClick={beginNewTask}><CirclePlus size={18} />Add row</button>
               </>
             ) : null}
           </div>
@@ -1031,27 +970,23 @@ export default function Home() {
         ) : activeView === "settings" ? (
           <SettingsView profiles={profiles} rows={rows} currentProfile={profile} isAdmin={isAdmin} onManage={(next, replacement) => void manageProfile(next, replacement)} />
         ) : activeTracker ? (
-          activeTracker.id === "fixed-fees" ? (
-            <FeesTrackerView clients={approvedClients} query={query} />
-          ) : (
-            <>
-              {newTask ? (
-                <NewTaskPanel tracker={activeTracker} draft={newTask} clients={eligibleClientsForTracker} profiles={activeProfiles} onChange={setNewTask} onSave={() => void createTask()} onCancel={() => setNewTask(null)} />
-              ) : null}
-              <TrackerView
-                tracker={activeTracker}
-                rows={trackerRows}
-                profiles={profiles}
-                isAdmin={isAdmin}
-                canEdit={canEditRow}
-                expandedRows={expandedRows}
-                onToggle={(id) => setExpandedRows((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id])}
-                onUpdate={(id, patch) => void updateRow(id, patch)}
-                onDetail={(id, field, value) => void updateDetail(id, field, value)}
-                onDelete={(id) => void deleteRow(id)}
-              />
-            </>
-          )
+          <>
+            {newTask ? (
+              <NewTaskPanel tracker={activeTracker} draft={newTask} clients={eligibleClientsForTracker} profiles={activeProfiles} onChange={setNewTask} onSave={() => void createTask()} onCancel={() => setNewTask(null)} />
+            ) : null}
+            <TrackerView
+              tracker={activeTracker}
+              rows={trackerRows}
+              profiles={profiles}
+              isAdmin={isAdmin}
+              canEdit={canEditRow}
+              expandedRows={expandedRows}
+              onToggle={(id) => setExpandedRows((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id])}
+              onUpdate={(id, patch) => void updateRow(id, patch)}
+              onDetail={(id, field, value) => void updateDetail(id, field, value)}
+              onDelete={(id) => void deleteRow(id)}
+            />
+          </>
         ) : (
           <DashboardView
             rows={visibleRows}
@@ -1178,7 +1113,7 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
       <div className="sectionTitle"><div><p className="eyebrow">{isAdmin ? "Approvals and clients" : "Shared clients"}</p><h3>All Clients</h3></div><button className="compactButton" onClick={onAdd}><CirclePlus size={16} />{isAdmin ? "Add" : "Request"}</button></div>
       {isAdmin && pendingCount ? <div className="approvalInboxNotice" role="status"><Bell size={16} /><strong>{pendingCount}</strong> client request{pendingCount === 1 ? "" : "s"} waiting for review</div> : null}
       <label className="workSearch clientSearch"><Search size={15} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search clients" /></label>
-      <div className="clientList">{displayed.map((client) => <button key={client.id} className={selectedId === client.id ? "clientListItem active" : "clientListItem"} onClick={() => { setReason(client.rejectionReason); setConfirmDelete(false); onSelect(client.id); }}><strong>{client.name}<ClientStatusBadge status={client.status} /></strong><span>{client.type}</span><small>{(client.serviceIds ?? []).length} linked service{(client.serviceIds ?? []).length === 1 ? "" : "s"} | {(client.fees ?? []).length} fee line{(client.fees ?? []).length === 1 ? "" : "s"}</small><small>Requested by {profiles.find((profile) => profile.id === client.requestedBy)?.displayName ?? "Staff member"}</small></button>)}</div>
+      <div className="clientList">{displayed.map((client) => <button key={client.id} className={selectedId === client.id ? "clientListItem active" : "clientListItem"} onClick={() => { setReason(client.rejectionReason); setConfirmDelete(false); onSelect(client.id); }}><strong>{client.name}<ClientStatusBadge status={client.status} /></strong><span>{client.type}</span><small>{(client.serviceIds ?? []).length} linked service{(client.serviceIds ?? []).length === 1 ? "" : "s"}</small><small>Requested by {profiles.find((profile) => profile.id === client.requestedBy)?.displayName ?? "Staff member"}</small></button>)}</div>
     </div>
     <div className="clientsPanel clientEditorPanel">
       {draft ? <>
@@ -1205,23 +1140,6 @@ function ClientsView({ clients, profiles, draft, selectedId, search, currentProf
               </div>
             ))}
           </div> : <p className="servicesHelp">No client contacts have been entered yet.</p>}
-        </section>
-        <section className="clientSubsection" aria-label="Client fees">
-          <div className="serviceHeader">
-            <div><p className="eyebrow">Fees</p><h3>Billing Arrangements</h3></div>
-            {editable ? <button className="secondaryButton compactAction" onClick={() => onChange({ ...draft, fees: [...(draft.fees ?? []), { id: crypto.randomUUID(), description: "", billingFrequency: "Monthly", amount: "", notes: "" }] })}><CirclePlus size={15} />Add fee</button> : null}
-          </div>
-          {(draft.fees ?? []).length ? <div className="feeList">
-            {(draft.fees ?? []).map((fee) => (
-              <div className="feeRow" key={fee.id}>
-                <label><span>Description</span><input disabled={!editable} placeholder="Accounts, payroll..." value={fee.description} onChange={(event) => onChange({ ...draft, fees: (draft.fees ?? []).map((item) => item.id === fee.id ? { ...item, description: event.target.value } : item) })} /></label>
-                <label><span>Frequency</span><select disabled={!editable} value={fee.billingFrequency} onChange={(event) => onChange({ ...draft, fees: (draft.fees ?? []).map((item) => item.id === fee.id ? { ...item, billingFrequency: event.target.value } : item) })}>{billingFrequencies.map((frequency) => <option key={frequency}>{frequency}</option>)}</select></label>
-                <label><span>Amount (£)</span><input disabled={!editable} type="number" min="0" step="0.01" value={fee.amount} onChange={(event) => onChange({ ...draft, fees: (draft.fees ?? []).map((item) => item.id === fee.id ? { ...item, amount: event.target.value } : item) })} /></label>
-                <label><span>Notes</span><input disabled={!editable} value={fee.notes} onChange={(event) => onChange({ ...draft, fees: (draft.fees ?? []).map((item) => item.id === fee.id ? { ...item, notes: event.target.value } : item) })} /></label>
-                {editable ? <button className="iconDeleteButton" aria-label={`Remove ${fee.description || "fee"}`} onClick={() => onChange({ ...draft, fees: (draft.fees ?? []).filter((item) => item.id !== fee.id) })}><Trash2 size={16} /></button> : null}
-              </div>
-            ))}
-          </div> : <p className="servicesHelp">No fee arrangements have been entered yet.</p>}
         </section>
         <section className="clientServices" aria-label="Client services">
           <div className="serviceHeader">
@@ -1460,46 +1378,6 @@ function StaffSettingsCard({ staff, currentProfile, profiles, openWorkCount, isA
         </div>
       ) : null}
     </article>
-  );
-}
-
-function FeesTrackerView({ clients, query }: { clients: SharedClient[]; query: string }) {
-  const term = query.trim().toLowerCase();
-  const feeLines = clients.flatMap((client) => (client.fees ?? []).map((fee) => ({ client, fee })))
-    .filter(({ client, fee }) => !term || [client.name, fee.description, fee.billingFrequency, fee.notes].some((value) => value.toLowerCase().includes(term)));
-  const annualRecurringTotal = feeLines.reduce((total, { fee }) => total + annualisedFee(fee), 0);
-  const monthlyRecurringTotal = annualRecurringTotal / 12;
-
-  return (
-    <section className="trackerPanel feeTrackerPanel">
-      <div className="trackerHeader" style={{ "--accent": "#00b0f0" } as React.CSSProperties}>
-        <div><h3>Fees Tracker</h3><p>Billing arrangements saved against approved clients.</p></div>
-        <span>{feeLines.length} fee line{feeLines.length === 1 ? "" : "s"}</span>
-      </div>
-      <div className="feeSummary">
-        <article><span>Recurring monthly equivalent</span><strong>{formatMoney(monthlyRecurringTotal)}</strong></article>
-        <article><span>Recurring annual total</span><strong>{formatMoney(annualRecurringTotal)}</strong></article>
-      </div>
-      {feeLines.length ? (
-        <div className="simpleTableWrap">
-          <table className="simpleTable feeTable">
-            <thead><tr><th>Client</th><th>Fee description</th><th>Frequency</th><th>Amount</th><th>Annual equivalent</th><th>Notes</th></tr></thead>
-            <tbody>
-              {feeLines.map(({ client, fee }) => (
-                <tr key={fee.id}>
-                  <td data-label="Client">{client.name}</td>
-                  <td data-label="Fee description">{fee.description}</td>
-                  <td data-label="Frequency">{fee.billingFrequency}</td>
-                  <td data-label="Amount">{formatMoney(Number(fee.amount))}</td>
-                  <td data-label="Annual equivalent">{annualisedFee(fee) ? formatMoney(annualisedFee(fee)) : "-"}</td>
-                  <td data-label="Notes">{fee.notes || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <div className="emptyState feeEmptyState"><strong>No approved client fees in this view</strong><p>Add fee arrangements in the Clients section.</p></div>}
-    </section>
   );
 }
 
@@ -1752,8 +1630,8 @@ function createStarterRow(client: SharedClient, assignee: Profile, tracker: Trac
 function fixedDetailFieldsForTracker(tracker: Tracker) {
   const fieldsByTracker: Record<string, string[]> = {
     "vat-returns": ["VAT Qtr", "Year End", "VAT Scheme"],
-    "monthly-bk-vat": ["Quarterly", "Fee Type", "VAT Qtr", "Year End", "Scheme"],
-    "monthly-bk-non-vat": ["Quarterly", "Fee Type", "Monthly BK", "Year End"],
+    "monthly-bk-vat": ["Quarterly", "VAT Qtr", "Year End", "Scheme"],
+    "monthly-bk-non-vat": ["Quarterly", "Monthly BK", "Year End"],
     payroll: ["Software", "Pension", "Employees"],
     cis: ["Refund Due"]
   };
@@ -2212,18 +2090,6 @@ function dateSortValue(value: string | null) {
   return value ? new Date(`${value}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
-function annualisedFee(fee: ClientFee) {
-  const amount = Number(fee.amount) || 0;
-  if (fee.billingFrequency === "Monthly") return amount * 12;
-  if (fee.billingFrequency === "Quarterly") return amount * 4;
-  if (fee.billingFrequency === "Annually") return amount;
-  return 0;
-}
-
-function formatMoney(amount: number) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(amount);
-}
-
 function formatDateCompact(value: string | null) {
   if (!value) return "";
   const [year, month, day] = value.split("-").map(Number);
@@ -2248,7 +2114,7 @@ function getServiceAssigneeProfile(client: SharedClient, serviceId: string, prof
   return profiles.find((profile) => profile.id === assigneeId) ?? fallbackProfile;
 }
 
-function recordToClient(record: ClientRecord, services: ClientServiceRecord[], contacts: ClientContactRecord[], fees: ClientFeeRecord[]): SharedClient {
+function recordToClient(record: ClientRecord, services: ClientServiceRecord[], contacts: ClientContactRecord[]): SharedClient {
   const clientServices = services.filter((service) => service.client_id === record.id);
   return {
     id: record.id,
@@ -2264,8 +2130,7 @@ function recordToClient(record: ClientRecord, services: ClientServiceRecord[], c
     serviceIds: clientServices.map((service) => service.tracker_id),
     serviceRecurrences: Object.fromEntries(clientServices.map((service) => [service.tracker_id, normalizeRecurrence(service.tracker_id, { isMonthly: Boolean(service.is_monthly), quarterCycle: isQuarterCycle(service.quarter_cycle) ? service.quarter_cycle : null, payrollFrequency: isPayrollFrequency(service.quarter_cycle) ? service.quarter_cycle : null })])),
     serviceAssigneeIds: Object.fromEntries(clientServices.map((service) => [service.tracker_id, service.assignee_id ?? record.main_contact_id])),
-    contacts: contacts.filter((contact) => contact.client_id === record.id).map((contact) => ({ id: contact.id, fullName: contact.full_name, role: contact.role ?? "", email: contact.email ?? "" })),
-    fees: fees.filter((fee) => fee.client_id === record.id).map((fee) => ({ id: fee.id, description: fee.description, billingFrequency: fee.billing_frequency, amount: String(fee.amount), notes: fee.notes ?? "" }))
+    contacts: contacts.filter((contact) => contact.client_id === record.id).map((contact) => ({ id: contact.id, fullName: contact.full_name, role: contact.role ?? "", email: contact.email ?? "" }))
   };
 }
 

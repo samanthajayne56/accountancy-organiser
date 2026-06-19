@@ -1,6 +1,6 @@
 # Accountancy Organiser
 
-A private internal dashboard for organising accountancy work, client records, staff assignments, recurring service periods, deadlines, and fee information.
+A private internal dashboard for organising accountancy work, client records, staff assignments, recurring service periods, and deadlines.
 
 The project is built with Next.js, React, TypeScript, Supabase, and Supabase row level security. It is intended for authenticated team use only and should not include live client data, staff personal data, credentials, or private business information in the repository.
 
@@ -9,8 +9,8 @@ The project is built with Next.js, React, TypeScript, Supabase, and Supabase row
 - Secure sign-in with Supabase Authentication.
 - Shared dashboard for active work items, deadlines, priorities, and assignment status.
 - Client record management with approval workflows.
-- Contact and fee tracking for approved clients.
-- Service-based work trackers for tax, accounts, bookkeeping, payroll, compliance, and billing workflows.
+- Contact tracking for approved clients.
+- Service-based work trackers for tax, accounts, bookkeeping, payroll, and compliance workflows.
 - Recurring period support for monthly and quarterly work.
 - Deadline alerts for overdue, due-today, and upcoming items.
 - Staff access management with administrator-only controls.
@@ -100,7 +100,6 @@ Do not commit:
 - Environment files.
 - Real client names, contacts, addresses, emails, or notes.
 - Real staff personal data.
-- Live fee records or billing data.
 - Production database exports.
 - Screenshots containing private data.
 

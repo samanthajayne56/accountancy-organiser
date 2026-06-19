@@ -1419,14 +1419,12 @@ h3 {
   padding: 0 10px;
 }
 
-.contactList,
-.feeList {
+.contactList {
   display: grid;
   gap: 9px;
 }
 
-.contactRow,
-.feeRow {
+.contactRow {
   display: grid;
   align-items: end;
   gap: 8px;
@@ -1440,26 +1438,18 @@ h3 {
   grid-template-columns: 1fr 0.8fr 1.25fr auto;
 }
 
-.feeRow {
-  grid-template-columns: 1fr 0.78fr 0.66fr 1fr auto;
-}
-
-.contactRow label,
-.feeRow label {
+.contactRow label {
   display: grid;
   gap: 4px;
 }
 
-.contactRow span,
-.feeRow span {
+.contactRow span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }
 
-.contactRow input,
-.feeRow input,
-.feeRow select {
+.contactRow input {
   min-height: 34px;
   border: 1px solid var(--line);
   background: #fff;
@@ -1633,59 +1623,6 @@ h3 {
 
 .recurrenceOption input {
   accent-color: var(--brand-teal);
-}
-
-.feeSummary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(210px, 270px));
-  gap: 10px;
-  padding: 14px;
-  border-bottom: 1px solid var(--line);
-  background: #fff;
-}
-
-.feeSummary article {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--brand-teal);
-  background: var(--brand-blue);
-  padding: 10px 12px;
-  border-radius: 8px;
-}
-
-.feeSummary span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.feeSummary strong {
-  font-size: 23px;
-}
-
-.feeTable {
-  min-width: 820px;
-}
-
-.feeTable th:nth-child(1),
-.feeTable td:nth-child(1),
-.feeTable th:nth-child(2),
-.feeTable td:nth-child(2) {
-  width: 190px;
-}
-
-.feeTable th:nth-child(3),
-.feeTable td:nth-child(3),
-.feeTable th:nth-child(4),
-.feeTable td:nth-child(4),
-.feeTable th:nth-child(5),
-.feeTable td:nth-child(5) {
-  width: 145px;
-}
-
-.feeEmptyState {
-  margin: 14px;
 }
 
 .serviceFields {
@@ -2972,7 +2909,6 @@ h3 {
   .taskEditGrid,
   .clientFormGrid,
   .serviceGrid,
-  .feeSummary,
   .workloadColumns,
   .trackerFilters,
   .periodTileGrid,
@@ -2984,8 +2920,7 @@ h3 {
     grid-column: auto;
   }
 
-  .contactRow,
-  .feeRow {
+  .contactRow {
     grid-template-columns: 1fr;
   }
 
